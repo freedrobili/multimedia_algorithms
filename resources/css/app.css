@@ -9,3 +9,61 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+.histogram-container {
+    background: white;
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    height: 120px; /* Компактная высота */
+    position: relative;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    overflow: hidden; /* Важно: скрываем переполнение */
+}
+
+.histogram-container:hover {
+    border-color: #007bff;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.histogram-container canvas {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+/* Стили для модального окна с увеличенной гистограммой */
+.histogram-modal .modal-dialog {
+    max-width: 90%;
+    height: 90vh;
+}
+
+.histogram-modal .modal-content {
+    height: 100%;
+}
+
+.histogram-modal .modal-body {
+    height: calc(100% - 120px);
+    padding: 20px;
+    position: relative;
+}
+
+#enlargedHistogram {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.histogram-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000;
+    display: none;
+}

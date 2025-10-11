@@ -125,18 +125,20 @@ class ImageProcessingController extends Controller
             $width = $image->width();
             $height = $image->height();
 
-            // Ограничиваем размер для производительности (опционально)
+            // Ограничиваем размер для производительности
             $sampleStep = 1;
             if ($width * $height > 1000000) {
-                $sampleStep = 2; // Уменьшаем детализацию для больших изображений
+                $sampleStep = ceil(sqrt($width * $height / 1000000));
             }
+
+            Log::info("Создание гистограммы: {$width}x{$height}, шаг: {$sampleStep}");
 
             for ($x = 0; $x < $width; $x += $sampleStep) {
                 for ($y = 0; $y < $height; $y += $sampleStep) {
                     try {
                         $color = $image->pickColor($x, $y);
 
-                        // Получаем числовые значения каналов (для Intervention 3.x используем ->value())
+                        // Получаем числовые значения каналов
                         $r = $color->red()->value();
                         $g = $color->green()->value();
                         $b = $color->blue()->value();
@@ -147,7 +149,6 @@ class ImageProcessingController extends Controller
                         $blueHistogram[$b]++;
                         $grayHistogram[$gray]++;
                     } catch (\Exception $e) {
-                        // Пропускаем проблемные пиксели
                         continue;
                     }
                 }
@@ -155,6 +156,8 @@ class ImageProcessingController extends Controller
 
             // Нормализуем гистограммы
             $maxValue = max(max($redHistogram), max($greenHistogram), max($blueHistogram), max($grayHistogram));
+
+            Log::info("Максимальное значение гистограммы: {$maxValue}");
 
             if ($maxValue > 0) {
                 $redHistogram = array_map(function($val) use ($maxValue) {
@@ -179,12 +182,19 @@ class ImageProcessingController extends Controller
                 'gray' => $grayHistogram
             ];
 
+            // Создаем директорию для гистограмм если не существует
+            Storage::disk('public')->makeDirectory('uploads/histograms');
+
             $histogramFileName = 'histogram_' . $type . '_' . Str::random(10) . '_' . time() . '.json';
             $histogramFilePath = 'uploads/histograms/' . $histogramFileName;
 
             Storage::disk('public')->put($histogramFilePath, json_encode($histogramData));
 
-            return Storage::disk('public')->url($histogramFilePath);
+            $url = Storage::disk('public')->url($histogramFilePath);
+
+            Log::info("Гистограмма создана: {$histogramFilePath}, URL: {$url}");
+
+            return $url;
 
         } catch (\Exception $e) {
             Log::error('Ошибка создания гистограммы: ' . $e->getMessage());
@@ -431,19 +441,39 @@ class ImageProcessingController extends Controller
 
         try {
             $url = $request->histogram_url;
-            $baseUrl = Storage::disk('public')->url('');
-            $path = str_replace($baseUrl, '', $url);
 
-            if (Storage::disk('public')->exists($path)) {
-                $data = json_decode(Storage::disk('public')->get($path), true);
-                return response()->json($data);
+            Log::info("Запрос данных гистограммы: {$url}");
+
+            // Извлекаем путь из URL
+            $parsedUrl = parse_url($url);
+            $path = $parsedUrl['path'] ?? '';
+
+            // Убираем начальный /storage/ из пути
+            if (strpos($path, '/storage/') === 0) {
+                $path = substr($path, 9); // убираем '/storage/'
             }
 
+            Log::info("Извлеченный путь: {$path}");
+
+            if (Storage::disk('public')->exists($path)) {
+                $content = Storage::disk('public')->get($path);
+                $data = json_decode($content, true);
+
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    Log::info("Данные гистограммы успешно загружены");
+                    return response()->json($data);
+                } else {
+                    Log::error('Ошибка декодирования JSON: ' . json_last_error_msg());
+                    return response()->json(['error' => 'Неверный формат данных гистограммы'], 500);
+                }
+            }
+
+            Log::error('Файл гистограммы не найден: ' . $path);
             return response()->json(['error' => 'Данные гистограммы не найдены'], 404);
 
         } catch (\Exception $e) {
             Log::error('Ошибка загрузки данных гистограммы: ' . $e->getMessage());
-            return response()->json(['error' => 'Ошибка загрузки данных гистограммы'], 500);
+            return response()->json(['error' => 'Ошибка загрузки данных гистограммы: ' . $e->getMessage()], 500);
         }
     }
 

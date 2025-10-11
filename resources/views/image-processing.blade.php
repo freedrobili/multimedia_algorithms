@@ -132,8 +132,9 @@
                                 </div>
                                 <div class="col-md-6">
                                     <div class="histogram-container">
-                                        <h6 class="text-center">Гистограмма исходного изображения</h6>
-                                        <canvas id="originalHistogram" width="400" height="200"></canvas>
+                                        <h6 class="text-center mb-2">Гистограмма исходного изображения</h6>
+                                        <p class="text-center text-muted small">Нажмите для увеличения</p>
+                                        <canvas id="originalHistogram" width="400" height="100"></canvas>
                                     </div>
                                 </div>
                             </div>
@@ -243,9 +244,513 @@
         </div>
     </div>
 </div>
+<!-- Модальное окно для увеличенной гистограммы -->
+<div class="modal fade histogram-modal" id="histogramModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="histogramModalTitle">Детальная гистограмма</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <canvas id="enlargedHistogram"></canvas>
+                <div class="histogram-tooltip" id="histogramTooltip"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    // Функция загрузки и отображения гистограммы (исправленная версия)
+    // Глобальные переменные для управления гистограммами
+    let currentHistogramData = null;
+    let currentHistogramLabel = '';
+
+    // Функция загрузки и отображения гистограммы (компактная версия)
+    // Функция загрузки и отображения гистограммы (компактная версия)
+    async function loadAndDisplayHistogram(histogramUrl, canvasId, label, isCompact = true) {
+        try {
+            console.log('Загрузка гистограммы:', histogramUrl);
+
+            if (!histogramUrl) {
+                console.error('URL гистограммы не указан');
+                return;
+            }
+
+            const response = await fetch('{{ route("image.histogram.data") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    histogram_url: histogramUrl
+                })
+            });
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Не JSON ответ:', text);
+                throw new Error('Сервер вернул не JSON ответ. Возможно, произошла ошибка на сервере.');
+            }
+
+            const histogramData = await response.json();
+            console.log('Данные гистограммы получены:', histogramData);
+
+            if (!response.ok) {
+                throw new Error(histogramData.error || 'Произошла ошибка при загрузке гистограммы');
+            }
+
+            if (histogramData.error) {
+                console.error('Ошибка в данных:', histogramData.error);
+                return;
+            }
+
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) {
+                console.error('Canvas не найден:', canvasId);
+                return;
+            }
+
+            // ЯВНО УСТАНАВЛИВАЕМ РАЗМЕРЫ CANVAS
+            const container = canvas.parentElement;
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+
+            canvas.style.width = containerWidth + 'px';
+            canvas.style.height = containerHeight + 'px';
+            canvas.width = containerWidth;
+            canvas.height = containerHeight;
+
+            const ctx = canvas.getContext('2d');
+
+            // Убедимся, что предыдущий график уничтожен
+            if (canvas.chart) {
+                canvas.chart.destroy();
+            }
+
+            // Сохраняем данные для возможности увеличения
+            canvas.histogramData = histogramData;
+            canvas.histogramLabel = label;
+
+            // Добавляем обработчик клика для увеличения
+            container.addEventListener('click', function() {
+                showEnlargedHistogram(histogramData, label);
+            });
+
+            // Настройки для компактного отображения
+            const compactOptions = {
+                responsive: false, // ВАЖНО: отключаем responsive mode
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: false
+                    },
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        enabled: false
+                    }
+                },
+                scales: {
+                    x: {
+                        display: false,
+                        min: 0,
+                        max: 255
+                    },
+                    y: {
+                        display: false,
+                        beginAtZero: true,
+                        min: 0,
+                        max: 100
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                elements: {
+                    point: {
+                        radius: 0
+                    }
+                }
+            };
+
+            // Настройки для полноразмерного отображения
+            const fullOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: label,
+                        font: {
+                            size: 16
+                        }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    tooltip: {
+                        enabled: true,
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Уровень яркости'
+                        },
+                        min: 0,
+                        max: 255
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Частота (%)'
+                        },
+                        beginAtZero: true,
+                        min: 0,
+                        max: 100
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                elements: {
+                    point: {
+                        radius: 0,
+                        hoverRadius: 4
+                    }
+                }
+            };
+
+            const options = isCompact ? compactOptions : fullOptions;
+
+            // Создаем данные для Chart.js
+            const labels = Array.from({length: 256}, (_, i) => i);
+
+            canvas.chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Красный канал',
+                            data: histogramData.red,
+                            borderColor: 'rgba(255, 0, 0, 0.8)',
+                            backgroundColor: 'rgba(255, 0, 0, 0.1)',
+                            borderWidth: 1,
+                            tension: 0.4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Зеленый канал',
+                            data: histogramData.green,
+                            borderColor: 'rgba(0, 255, 0, 0.8)',
+                            backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                            borderWidth: 1,
+                            tension: 0.4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Синий канал',
+                            data: histogramData.blue,
+                            borderColor: 'rgba(0, 0, 255, 0.8)',
+                            backgroundColor: 'rgba(0, 0, 255, 0.1)',
+                            borderWidth: 1,
+                            tension: 0.4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Яркость',
+                            data: histogramData.gray,
+                            borderColor: 'rgba(128, 128, 128, 0.8)',
+                            backgroundColor: 'rgba(128, 128, 128, 0.1)',
+                            borderWidth: 1,
+                            tension: 0.4,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: options
+            });
+
+            console.log('Гистограмма отображена успешно. Размеры:', containerWidth, 'x', containerHeight);
+
+        } catch (error) {
+            console.error('Ошибка загрузки гистограммы:', error);
+            const canvas = document.getElementById(canvasId);
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#f8f9fa';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#6c757d';
+                ctx.textAlign = 'center';
+                ctx.fillText('Гистограмма недоступна', canvas.width / 2, canvas.height / 2);
+            }
+        }
+    }
+
+    // Функция показа увеличенной гистограммы в модальном окне
+    function showEnlargedHistogram(histogramData, label) {
+        currentHistogramData = histogramData;
+        currentHistogramLabel = label;
+
+        const modal = new bootstrap.Modal(document.getElementById('histogramModal'));
+        const modalTitle = document.getElementById('histogramModalTitle');
+        modalTitle.textContent = label;
+
+        modal.show();
+
+        // Даем время на отображение модального окна перед инициализацией графика
+        setTimeout(() => {
+            createEnlargedHistogram(histogramData, label);
+        }, 100);
+    }
+
+    // Создание увеличенной гистограммы
+    function createEnlargedHistogram(histogramData, label) {
+        const canvas = document.getElementById('enlargedHistogram');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+
+        // Уничтожаем предыдущий график
+        if (canvas.chart) {
+            canvas.chart.destroy();
+        }
+
+        const labels = Array.from({length: 256}, (_, i) => i);
+
+        canvas.chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Красный канал',
+                        data: histogramData.red,
+                        borderColor: 'rgba(255, 0, 0, 0.9)',
+                        backgroundColor: 'rgba(255, 0, 0, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    },
+                    {
+                        label: 'Зеленый канал',
+                        data: histogramData.green,
+                        borderColor: 'rgba(0, 255, 0, 0.9)',
+                        backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    },
+                    {
+                        label: 'Синий канал',
+                        data: histogramData.blue,
+                        borderColor: 'rgba(0, 0, 255, 0.9)',
+                        backgroundColor: 'rgba(0, 0, 255, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    },
+                    {
+                        label: 'Яркость',
+                        data: histogramData.gray,
+                        borderColor: 'rgba(128, 128, 128, 0.9)',
+                        backgroundColor: 'rgba(128, 128, 128, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: label,
+                        font: {
+                            size: 18,
+                            weight: 'bold'
+                        }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: {
+                                size: 14
+                            },
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        enabled: true,
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleFont: {
+                            size: 14
+                        },
+                        bodyFont: {
+                            size: 13
+                        },
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.dataset.label || '';
+                                const value = context.parsed.y.toFixed(2);
+                                const brightness = context.dataIndex;
+                                return `${label}: ${value}% (яркость: ${brightness})`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Уровень яркости (0-255)',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        min: 0,
+                        max: 255,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        },
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Частота (%)',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        beginAtZero: true,
+                        min: 0,
+                        max: 100,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        },
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                elements: {
+                    point: {
+                        radius: 0,
+                        hoverRadius: 6,
+                        hoverBorderWidth: 3
+                    }
+                },
+                animation: {
+                    duration: 1000,
+                    easing: 'easeOutQuart'
+                }
+            }
+        });
+    }
+
+    // Обновленная функция отображения результата операции
+    function displayResult(operation, result) {
+        const resultDiv = document.getElementById(operation + 'Result');
+
+        resultDiv.innerHTML = `
+        <div class="image-comparison">
+            <div class="image-comparison-item">
+                <h6>Обработанное изображение</h6>
+                <img src="${result.processed_url}" class="preview-image"
+                     onload="console.log('Изображение загружено: ${result.processed_url}')"
+                     onerror="console.error('Ошибка загрузки изображения: ${result.processed_url}')">
+            </div>
+            <div class="image-comparison-item">
+                <h6>Гистограмма обработанного изображения</h6>
+                <div class="histogram-container">
+                    <canvas id="${operation}Histogram" width="400" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+    `;
+
+        // Загружаем и отображаем гистограмму обработанного изображения в компактном виде
+        if (result.histogram_url) {
+            console.log('Загрузка гистограммы для операции:', operation, 'URL:', result.histogram_url);
+            setTimeout(() => {
+                loadAndDisplayHistogram(result.histogram_url, operation + 'Histogram', 'Обработанное изображение', true);
+            }, 100);
+        } else {
+            console.error('URL гистограммы не указан для операции:', operation);
+        }
+    }
+
+    // Обновленная функция отображения результата
+    // function displayResult(operation, result) {
+    //     const resultDiv = document.getElementById(operation + 'Result');
+    //
+    //     resultDiv.innerHTML = `
+    //     <div class="image-comparison">
+    //         <div class="image-comparison-item">
+    //             <h6>Обработанное изображение</h6>
+    //             <img src="${result.processed_url}" class="preview-image" onload="console.log('Изображение загружено: ${result.processed_url}')" onerror="console.error('Ошибка загрузки изображения: ${result.processed_url}')">
+    //         </div>
+    //         <div class="image-comparison-item">
+    //             <h6>Гистограмма обработанного изображения</h6>
+    //             <div class="histogram-container">
+    //                 <canvas id="${operation}Histogram" width="400" height="200"></canvas>
+    //             </div>
+    //         </div>
+    //     </div>
+    // `;
+    //
+    //     // Загружаем и отображаем гистограмму обработанного изображения
+    //     if (result.histogram_url) {
+    //         console.log('Загрузка гистограммы для операции:', operation, 'URL:', result.histogram_url);
+    //         setTimeout(() => {
+    //             loadAndDisplayHistogram(result.histogram_url, operation + 'Histogram', 'Обработанное изображение');
+    //         }, 100);
+    //     } else {
+    //         console.error('URL гистограммы не указан для операции:', operation);
+    //     }
+    // }
     document.addEventListener('DOMContentLoaded', function() {
         const uploadArea = document.getElementById('uploadArea');
         const imageInput = document.getElementById('imageInput');
@@ -352,8 +857,13 @@
 
         // Загрузка и отображение гистограммы исходного изображения
         const originalHistogramUrl = document.getElementById('originalHistogramUrl');
-        if (originalHistogramUrl) {
-            loadAndDisplayHistogram(originalHistogramUrl.value, 'originalHistogram', 'Исходное изображение');
+        if (originalHistogramUrl && originalHistogramUrl.value) {
+            console.log('Загрузка исходной гистограммы:', originalHistogramUrl.value);
+            setTimeout(() => {
+                loadAndDisplayHistogram(originalHistogramUrl.value, 'originalHistogram', 'Исходное изображение', true);
+            }, 500);
+        } else {
+            console.error('URL исходной гистограммы не найден');
         }
     });
 
@@ -427,126 +937,26 @@
     }
 
     // Функция отображения результата
-    function displayResult(operation, result) {
-        const resultDiv = document.getElementById(operation + 'Result');
-
-        resultDiv.innerHTML = `
-            <div class="image-comparison">
-                <div class="image-comparison-item">
-                    <h6>Обработанное изображение</h6>
-                    <img src="${result.processed_url}" class="preview-image">
-                </div>
-                <div class="image-comparison-item">
-                    <h6>Гистограмма обработанного изображения</h6>
-                    <div class="histogram-container">
-                        <canvas id="${operation}Histogram" width="400" height="200"></canvas>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Загружаем и отображаем гистограмму обработанного изображения
-        loadAndDisplayHistogram(result.histogram_url, operation + 'Histogram', 'Обработанное изображение');
-    }
-
-    // Функция загрузки и отображения гистограммы
-    async function loadAndDisplayHistogram(histogramUrl, canvasId, label) {
-        try {
-            const response = await fetch('{{ route("image.histogram.data") }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({
-                    histogram_url: histogramUrl
-                })
-            });
-
-            const histogramData = await response.json();
-
-            if (histogramData.error) {
-                console.error('Ошибка загрузки гистограммы:', histogramData.error);
-                return;
-            }
-
-            const ctx = document.getElementById(canvasId).getContext('2d');
-
-            // Создаем данные для Chart.js
-            const labels = Array.from({length: 256}, (_, i) => i);
-
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Красный канал',
-                            data: histogramData.red,
-                            borderColor: 'rgba(255, 0, 0, 0.8)',
-                            backgroundColor: 'rgba(255, 0, 0, 0.1)',
-                            borderWidth: 1,
-                            tension: 0.4
-                        },
-                        {
-                            label: 'Зеленый канал',
-                            data: histogramData.green,
-                            borderColor: 'rgba(0, 255, 0, 0.8)',
-                            backgroundColor: 'rgba(0, 255, 0, 0.1)',
-                            borderWidth: 1,
-                            tension: 0.4
-                        },
-                        {
-                            label: 'Синий канал',
-                            data: histogramData.blue,
-                            borderColor: 'rgba(0, 0, 255, 0.8)',
-                            backgroundColor: 'rgba(0, 0, 255, 0.1)',
-                            borderWidth: 1,
-                            tension: 0.4
-                        },
-                        {
-                            label: 'Яркость',
-                            data: histogramData.gray,
-                            borderColor: 'rgba(128, 128, 128, 0.8)',
-                            backgroundColor: 'rgba(128, 128, 128, 0.1)',
-                            borderWidth: 1,
-                            tension: 0.4
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: label
-                        },
-                        legend: {
-                            display: true
-                        }
-                    },
-                    scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Уровень яркости'
-                            }
-                        },
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Частота (%)'
-                            },
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-
-        } catch (error) {
-            console.error('Ошибка загрузки гистограммы:', error);
-        }
-    }
+    // function displayResult(operation, result) {
+    //     const resultDiv = document.getElementById(operation + 'Result');
+    //
+    //     resultDiv.innerHTML = `
+    //         <div class="image-comparison">
+    //             <div class="image-comparison-item">
+    //                 <h6>Обработанное изображение</h6>
+    //                 <img src="${result.processed_url}" class="preview-image">
+    //             </div>
+    //             <div class="image-comparison-item">
+    //                 <h6>Гистограмма обработанного изображения</h6>
+    //                 <div class="histogram-container">
+    //                     <canvas id="${operation}Histogram" width="400" height="200"></canvas>
+    //                 </div>
+    //             </div>
+    //         </div>
+    //     `;
+    //
+    //     // Загружаем и отображаем гистограмму обработанного изображения
+    //     loadAndDisplayHistogram(result.histogram_url, operation + 'Histogram', 'Обработанное изображение');
+    // }
 </script>
-</body>
 </html>
