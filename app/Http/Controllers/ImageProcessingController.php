@@ -29,12 +29,6 @@ class ImageProcessingController extends Controller
     /**
      * Обработка загрузки изображения
      */
-    /**
-     * Обработка загрузки изображения
-     */
-    /**
-     * Обработка загрузки изображения
-     */
     public function uploadImage(Request $request)
     {
         // Валидация
@@ -119,8 +113,6 @@ class ImageProcessingController extends Controller
             }
 
             $manager = new ImageManager(new Driver());
-
-            // Для Intervention 3.x используем read()
             $image = $manager->read($imagePath);
 
             // Инициализируем массивы для гистограмм каналов
@@ -206,6 +198,11 @@ class ImageProcessingController extends Controller
      */
     public function processImage(Request $request)
     {
+        // Убедимся, что запрос является AJAX
+        if (!$request->expectsJson()) {
+            return response()->json(['error' => 'Требуется JSON запрос'], 400);
+        }
+
         $request->validate([
             'image_path' => 'required|string',
             'operation' => 'required|string',
@@ -217,15 +214,20 @@ class ImageProcessingController extends Controller
             $operation = $request->operation;
             $parameters = $request->parameters ?? [];
 
-            $fullPath = storage_path('app/public/' . $imagePath);
+            // Убедимся, что путь корректен
+            if (!Storage::disk('public')->exists($imagePath)) {
+                Log::error("Изображение не найдено: " . $imagePath);
+                return response()->json(['error' => 'Изображение не найдено'], 404);
+            }
+
+            $fullPath = Storage::disk('public')->path($imagePath);
 
             if (!file_exists($fullPath)) {
-                Log::error("Изображение не найдено: " . $fullPath);
+                Log::error("Изображение не найдено по пути: " . $fullPath);
                 return response()->json(['error' => 'Изображение не найдено'], 404);
             }
 
             $manager = new ImageManager(new Driver());
-            // Для Intervention 3.x используем read()
             $image = $manager->read($fullPath);
 
             $result = [];
@@ -261,96 +263,96 @@ class ImageProcessingController extends Controller
     }
 
     /**
-     * Просветление изображения
-     */
-    /**
-     * Просветление изображения
+     * Просветление изображения (исправленная версия для Intervention 3.x)
      */
     private function applyBrightness($image, $parameters)
     {
         $brightness = $parameters['value'] ?? 0;
 
-        // Применяем просветление через изменение каждого пикселя с помощью each()
-        $image->each(function ($color, $x, $y) use ($brightness) {
-            // Получаем числовые значения каналов
-            $r = $color->red()->value();
-            $g = $color->green()->value();
-            $b = $color->blue()->value();
+        // Используем встроенный метод brightness для Intervention 3.x
+        // Intervention 3.x ожидает значение от -100 до 100
+        $normalizedBrightness = (int)($brightness / 2.55); // Конвертируем из диапазона -255..255 в -100..100
 
-            // Применяем изменение яркости
-            $r = max(0, min(255, $r + $brightness));
-            $g = max(0, min(255, $g + $brightness));
-            $b = max(0, min(255, $b + $brightness));
-
-            // Возвращаем новый цвет
-            return new Color($r, $g, $b);
-        });
+        $image->brightness($normalizedBrightness);
 
         return $this->saveProcessedImage($image, 'brightness', $brightness);
     }
 
     /**
-     * Частичное инвертирование по каналу
+     * Частичное инвертирование по каналу (исправленная версия для Intervention 3.x)
      */
     private function applyPartialInversion($image, $channelType)
     {
-        $image->each(function ($color, $x, $y) use ($channelType) {
-            // Получаем числовые значения каналов
-            $r = $color->red()->value();
-            $g = $color->green()->value();
-            $b = $color->blue()->value();
+        $width = $image->width();
+        $height = $image->height();
 
-            if ($channelType === 'partial_red') {
-                $r = 255 - $r; // Инвертируем красный канал
-            } elseif ($channelType === 'partial_green') {
-                $g = 255 - $g; // Инвертируем зеленый канал
+        for ($x = 0; $x < $width; $x++) {
+            for ($y = 0; $y < $height; $y++) {
+                $color = $image->pickColor($x, $y);
+
+                $r = $color->red()->value();
+                $g = $color->green()->value();
+                $b = $color->blue()->value();
+
+                if ($channelType === 'partial_red') {
+                    $r = 255 - $r; // Инвертируем красный канал
+                } elseif ($channelType === 'partial_green') {
+                    $g = 255 - $g; // Инвертируем зеленый канал
+                }
+
+                // Создаем новый цвет и устанавливаем его
+                $newColor = new Color($r, $g, $b);
+                $image->drawPixel($x, $y, $newColor);
             }
-
-            // Возвращаем новый цвет
-            return new Color($r, $g, $b);
-        });
+        }
     }
 
     /**
-     * Пороговое преобразование
+     * Пороговое преобразование (исправленная версия для Intervention 3.x)
      */
     private function applyThreshold($image, $parameters)
     {
         $type = $parameters['type'] ?? 'binary';
         $threshold = $parameters['value'] ?? 128;
 
-        $image->each(function ($color, $x, $y) use ($type, $threshold) {
-            // Получаем числовые значения каналов
-            $r = $color->red()->value();
-            $g = $color->green()->value();
-            $b = $color->blue()->value();
+        $width = $image->width();
+        $height = $image->height();
 
-            $gray = (int)($r * 0.299 + $g * 0.587 + $b * 0.114);
+        for ($x = 0; $x < $width; $x++) {
+            for ($y = 0; $y < $height; $y++) {
+                $color = $image->pickColor($x, $y);
 
-            if ($type === 'binary') {
-                // Бинарное изображение
-                $value = $gray > $threshold ? 255 : 0;
-                return new Color($value, $value, $value);
-            } elseif ($type === 'slice') {
-                // Яркостные срезы
-                if ($gray >= $threshold - 20 && $gray <= $threshold + 20) {
-                    // Сохраняем оригинальный цвет для выбранного диапазона
-                    return $color;
+                $r = $color->red()->value();
+                $g = $color->green()->value();
+                $b = $color->blue()->value();
+
+                $gray = (int)($r * 0.299 + $g * 0.587 + $b * 0.114);
+
+                if ($type === 'binary') {
+                    // Бинарное изображение
+                    $value = $gray > $threshold ? 255 : 0;
+                    $newColor = new Color($value, $value, $value);
+                } elseif ($type === 'slice') {
+                    // Яркостные срезы
+                    if ($gray >= $threshold - 20 && $gray <= $threshold + 20) {
+                        $newColor = $color; // Сохраняем оригинальный цвет
+                    } else {
+                        $grayValue = (int)($gray * 0.5);
+                        $newColor = new Color($grayValue, $grayValue, $grayValue);
+                    }
                 } else {
-                    // Остальные пиксели делаем серыми
-                    $grayValue = (int)($gray * 0.5);
-                    return new Color($grayValue, $grayValue, $grayValue);
+                    $newColor = $color;
                 }
-            }
 
-            return $color;
-        });
+                $image->drawPixel($x, $y, $newColor);
+            }
+        }
 
         return $this->saveProcessedImage($image, 'threshold', $type . '_' . $threshold);
     }
 
     /**
-     * Изменение контраста
+     * Изменение контраста (исправленная версия для Intervention 3.x)
      */
     private function applyContrast($image, $parameters)
     {
@@ -358,164 +360,28 @@ class ImageProcessingController extends Controller
 
         // Коэффициенты контраста для разных типов
         $contrastMap = [
-            'low' => 20,
-            'medium' => 40,
-            'high' => 60
+            'low' => 10,
+            'medium' => 25,
+            'high' => 50
         ];
 
-        $contrast = $contrastMap[$type] ?? 40;
+        $contrast = $contrastMap[$type] ?? 25;
 
-        // Реализуем контраст вручную через each()
-        $factor = (259 * ($contrast + 255)) / (255 * (259 - $contrast));
-
-        $image->each(function ($color, $x, $y) use ($factor) {
-            // Получаем числовые значения каналов
-            $r = $color->red()->value();
-            $g = $color->green()->value();
-            $b = $color->blue()->value();
-
-            // Применяем контраст
-            $r = max(0, min(255, (int)($factor * ($r - 128) + 128)));
-            $g = max(0, min(255, (int)($factor * ($g - 128) + 128)));
-            $b = max(0, min(255, (int)($factor * ($b - 128) + 128)));
-
-            // Возвращаем новый цвет
-            return new Color($r, $g, $b);
-        });
+        // Используем встроенный метод contrast для Intervention 3.x
+        $image->contrast($contrast);
 
         return $this->saveProcessedImage($image, 'contrast', $type);
     }
 
     /**
-     * Частичное инвертирование по каналу
-     */
-//    private function applyPartialInversion($image, $channelType)
-//    {
-//        $width = $image->width();
-//        $height = $image->height();
-//
-//        for ($x = 0; $x < $width; $x++) {
-//            for ($y = 0; $y < $height; $y++) {
-//                $color = $image->pickColor($x, $y);
-//
-//                // Получаем числовые значения каналов (для Intervention 3.x используем ->value())
-//                $r = $color->red()->value();
-//                $g = $color->green()->value();
-//                $b = $color->blue()->value();
-//
-//                if ($channelType === 'partial_red') {
-//                    $r = 255 - $r; // Инвертируем красный канал
-//                } elseif ($channelType === 'partial_green') {
-//                    $g = 255 - $g; // Инвертируем зеленый канал
-//                }
-//
-//                // Создаем новый цвет
-//                $newColor = new Color($r, $g, $b);
-//                $image->setPixelColor($newColor, $x, $y);
-//            }
-//        }
-//    }
-//
-//    /**
-//     * Пороговое преобразование
-//     */
-//    private function applyThreshold($image, $parameters)
-//    {
-//        $type = $parameters['type'] ?? 'binary';
-//        $threshold = $parameters['value'] ?? 128;
-//
-//        $width = $image->width();
-//        $height = $image->height();
-//
-//        for ($x = 0; $x < $width; $x++) {
-//            for ($y = 0; $y < $height; $y++) {
-//                $color = $image->pickColor($x, $y);
-//
-//                // Получаем числовые значения каналов (для Intervention 3.x используем ->value())
-//                $r = $color->red()->value();
-//                $g = $color->green()->value();
-//                $b = $color->blue()->value();
-//
-//                $gray = (int)($r * 0.299 + $g * 0.587 + $b * 0.114);
-//
-//                if ($type === 'binary') {
-//                    // Бинарное изображение
-//                    $value = $gray > $threshold ? 255 : 0;
-//                    $newColor = new Color($value, $value, $value);
-//                    $image->setPixelColor($newColor, $x, $y);
-//                } elseif ($type === 'slice') {
-//                    // Яркостные срезы
-//                    if ($gray >= $threshold - 20 && $gray <= $threshold + 20) {
-//                        // Сохраняем оригинальный цвет для выбранного диапазона
-//                        // Ничего не меняем
-//                    } else {
-//                        // Остальные пиксели делаем серыми
-//                        $grayValue = (int)($gray * 0.5);
-//                        $newColor = new Color($grayValue, $grayValue, $grayValue);
-//                        $image->setPixelColor($newColor, $x, $y);
-//                    }
-//                }
-//            }
-//        }
-//
-//        return $this->saveProcessedImage($image, 'threshold', $type . '_' . $threshold);
-//    }
-//
-//    /**
-//     * Изменение контраста
-//     */
-//    private function applyContrast($image, $parameters)
-//    {
-//        $type = $parameters['type'] ?? 'medium';
-//
-//        // Коэффициенты контраста для разных типов
-//        $contrastMap = [
-//            'low' => 20,
-//            'medium' => 40,
-//            'high' => 60
-//        ];
-//
-//        $contrast = $contrastMap[$type] ?? 40;
-//
-//        // Реализуем контраст вручную через каждый пиксель
-//        $factor = (259 * ($contrast + 255)) / (255 * (259 - $contrast));
-//
-//        $width = $image->width();
-//        $height = $image->height();
-//
-//        for ($x = 0; $x < $width; $x++) {
-//            for ($y = 0; $y < $height; $y++) {
-//                $color = $image->pickColor($x, $y);
-//
-//                // Получаем числовые значения каналов (для Intervention 3.x используем ->value())
-//                $r = $color->red()->value();
-//                $g = $color->green()->value();
-//                $b = $color->blue()->value();
-//
-//                // Применяем контраст
-//                $r = max(0, min(255, (int)($factor * ($r - 128) + 128)));
-//                $g = max(0, min(255, (int)($factor * ($g - 128) + 128)));
-//                $b = max(0, min(255, (int)($factor * ($b - 128) + 128)));
-//
-//                // Создаем новый цвет
-//                $newColor = new Color($r, $g, $b);
-//                $image->setPixelColor($newColor, $x, $y);
-//            }
-//        }
-//
-//        return $this->saveProcessedImage($image, 'contrast', $type);
-//    }
-
-
-    /**
-     * Инвертирование изображения
+     * Инвертирование изображения (исправленная версия для Intervention 3.x)
      */
     private function applyInversion($image, $parameters)
     {
         $type = $parameters['type'] ?? 'full';
 
         if ($type === 'full') {
-            // Полное инвертирование
+            // Полное инвертирование с использованием встроенного метода
             $image->invert();
         } else {
             // Частичное инвертирование
@@ -525,7 +391,6 @@ class ImageProcessingController extends Controller
         return $this->saveProcessedImage($image, 'inversion', $type);
     }
 
-
     /**
      * Сохранение обработанного изображения и создание гистограммы
      */
@@ -533,6 +398,9 @@ class ImageProcessingController extends Controller
     {
         $fileName = $operation . '_' . Str::random(10) . '_' . time() . '.png';
         $filePath = 'uploads/processed/' . $fileName;
+
+        // Создаем директорию если не существует
+        Storage::disk('public')->makeDirectory('uploads/processed');
 
         // Сохраняем обработанное изображение
         $image->save(storage_path('app/public/' . $filePath));
@@ -547,12 +415,16 @@ class ImageProcessingController extends Controller
         ];
     }
 
-
     /**
      * Получение данных гистограммы
      */
     public function getHistogramData(Request $request)
     {
+        // Убедимся, что запрос является AJAX
+        if (!$request->expectsJson()) {
+            return response()->json(['error' => 'Требуется JSON запрос'], 400);
+        }
+
         $request->validate([
             'histogram_url' => 'required|string'
         ]);

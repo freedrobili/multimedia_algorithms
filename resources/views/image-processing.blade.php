@@ -358,6 +358,7 @@
     });
 
     // Функция применения операции
+    // Функция применения операции
     async function applyOperation(operation) {
         const imagePath = document.getElementById('originalImagePath').value;
         let parameters = {};
@@ -385,7 +386,9 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Requested-With': 'XMLHttpRequest', // Важно для Laravel
+                    'Accept': 'application/json' // Убедимся, что ожидаем JSON
                 },
                 body: JSON.stringify({
                     image_path: imagePath,
@@ -394,8 +397,20 @@
                 })
             });
 
+            // Проверяем, является ли ответ JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Не JSON ответ:', text);
+                throw new Error('Сервер вернул не JSON ответ. Возможно, произошла ошибка на сервере.');
+            }
+
             const result = await response.json();
             console.log('Ответ сервера:', result);
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Произошла ошибка при обработке изображения');
+            }
 
             if (result.error) {
                 alert('Ошибка: ' + result.error);

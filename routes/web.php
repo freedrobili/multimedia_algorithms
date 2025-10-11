@@ -17,7 +17,7 @@ Route::post('/color/get-circle-coordinates', [ColorController::class, 'getCircle
 Route::post('/color/get-hex-from-rgb', [ColorController::class, 'getHexFromRgb']);
 
 Route::get('/supported-formats', [ImageProcessingController::class, 'getSupportedFormats'])->name('image.supported.formats');
-
+Route::get('/lab2', [ImageProcessingController::class, 'showUploadForm']);
 //Route::get('/image-processing', [ImageProcessingController::class, 'showUploadForm'])->name('image.upload.form');
 Route::get('/image-processing', [ImageProcessingController::class, 'showUploadForm'])->name('image.upload.form');
 Route::post('/image-processing/upload', [ImageProcessingController::class, 'uploadImage'])->name('image.upload');
