@@ -12,52 +12,41 @@ use Intervention\Image\Colors\Rgb\Color;
 
 class ImageProcessingController extends Controller
 {
-    // Разрешенные типы файлов
     private $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
 
-    // Максимальный размер файла (5MB)
     private $maxFileSize = 5120;
 
     /**
-     * Отображение формы загрузки
+     * Отображение формы загрузки изображения
      */
     public function showUploadForm()
     {
         return view('image-processing');
     }
 
-    /**
-     * Обработка загрузки изображения
-     */
     public function uploadImage(Request $request)
     {
-        // Валидация
         $request->validate([
             'image' => [
                 'required',
                 'file',
                 'image',
-                'mimes:' . implode(',', $this->allowedExtensions),
+                'mimes:' . implode(',', $this->allowedExtensions), // Разрешенные MIME-типы
                 'max:' . $this->maxFileSize
             ]
         ]);
 
         try {
-            // Получаем файл
             $image = $request->file('image');
 
-            // Генерируем уникальное имя файла
             $fileName = Str::random(20) . '_' . time() . '.' . $image->getClientOriginalExtension();
 
-            // Сохраняем оригинальное изображение
             $path = $image->storeAs('uploads/images', $fileName, 'public');
 
-            // Проверяем, что файл действительно сохранился
             if (!Storage::disk('public')->exists($path)) {
                 throw new \Exception('Файл не был сохранен на диск');
             }
 
-            // Получаем информацию о файле
             $fileInfo = [
                 'original_name' => $image->getClientOriginalName(),
                 'file_name' => $fileName,
@@ -68,16 +57,13 @@ class ImageProcessingController extends Controller
                 'uploaded_at' => now(),
             ];
 
-            // Получаем полный путь к файлу для создания гистограммы
             $fullPath = Storage::disk('public')->path($path);
 
-            // Создаем гистограмму оригинального изображения
             $originalHistogram = $this->createHistogram($fullPath, 'original');
 
-            // Получаем URL для изображения
+            // Генерируем публичный URL для доступа к изображению
             $imageUrl = Storage::disk('public')->url($path);
 
-            // Логируем для отладки
             Log::info('Изображение загружено:', [
                 'path' => $path,
                 'url' => $imageUrl,
@@ -100,13 +86,9 @@ class ImageProcessingController extends Controller
         }
     }
 
-    /**
-     * Создание гистограммы изображения
-     */
     private function createHistogram($imagePath, $type = 'original')
     {
         try {
-            // Проверяем существование файла
             if (!file_exists($imagePath)) {
                 Log::error('Файл для гистограммы не существует: ' . $imagePath);
                 return null;
@@ -115,17 +97,14 @@ class ImageProcessingController extends Controller
             $manager = new ImageManager(new Driver());
             $image = $manager->read($imagePath);
 
-            // Инициализируем массивы для гистограмм каналов
             $redHistogram = array_fill(0, 256, 0);
             $greenHistogram = array_fill(0, 256, 0);
             $blueHistogram = array_fill(0, 256, 0);
             $grayHistogram = array_fill(0, 256, 0);
 
-            // Собираем данные гистограммы
             $width = $image->width();
             $height = $image->height();
 
-            // Ограничиваем размер для производительности
             $sampleStep = 1;
             if ($width * $height > 1000000) {
                 $sampleStep = ceil(sqrt($width * $height / 1000000));
@@ -133,56 +112,88 @@ class ImageProcessingController extends Controller
 
             Log::info("Создание гистограммы: {$width}x{$height}, шаг: {$sampleStep}");
 
+            $totalPixels = 0;
+            $sampledPixels = 0;
+
             for ($x = 0; $x < $width; $x += $sampleStep) {
                 for ($y = 0; $y < $height; $y += $sampleStep) {
                     try {
                         $color = $image->pickColor($x, $y);
-
-                        // Получаем числовые значения каналов
                         $r = $color->red()->value();
                         $g = $color->green()->value();
                         $b = $color->blue()->value();
-                        $gray = (int)($r * 0.299 + $g * 0.587 + $b * 0.114);
+
+                        // ИСПРАВЛЕННАЯ ФОРМУЛА ДЛЯ GRAY - используем правильные коэффициенты
+                        // Безопасное вычисление яркости
+                        $gray = (int)round($r * 0.299 + $g * 0.587 + $b * 0.114);
+                        $gray = max(0, min(255, $gray));  // ограничиваем диапазон
+
 
                         $redHistogram[$r]++;
                         $greenHistogram[$g]++;
                         $blueHistogram[$b]++;
                         $grayHistogram[$gray]++;
+                        $sampledPixels++;
                     } catch (\Exception $e) {
                         continue;
                     }
                 }
             }
 
-            // Нормализуем гистограммы
-            $maxValue = max(max($redHistogram), max($greenHistogram), max($blueHistogram), max($grayHistogram));
+            $totalPixels = $sampledPixels; // Используем фактическое количество обработанных пикселей
 
-            Log::info("Максимальное значение гистограммы: {$maxValue}");
+            // ИСПРАВЛЕНИЕ 1: Сохраняем абсолютные значения для логирования
+            $absoluteRed128 = $redHistogram[39];
+            $absoluteGreen128 = $greenHistogram[39];
+            $absoluteBlue128 = $blueHistogram[39];
+            $absoluteGray128 = $grayHistogram[39];
 
-            if ($maxValue > 0) {
-                $redHistogram = array_map(function($val) use ($maxValue) {
-                    return ($val / $maxValue) * 100;
-                }, $redHistogram);
-                $greenHistogram = array_map(function($val) use ($maxValue) {
-                    return ($val / $maxValue) * 100;
-                }, $greenHistogram);
-                $blueHistogram = array_map(function($val) use ($maxValue) {
-                    return ($val / $maxValue) * 100;
-                }, $blueHistogram);
-                $grayHistogram = array_map(function($val) use ($maxValue) {
-                    return ($val / $maxValue) * 100;
-                }, $grayHistogram);
-            }
+            $redHistogramReal = $redHistogram;
+            $greenHistogramReal = $greenHistogram;
+            $blueHistogramReal = $blueHistogram;
+            $grayHistogramReal = $grayHistogram;
 
-            // Сохраняем данные гистограммы в JSON
+            // ИСПРАВЛЕНИЕ 2: Нормализуем для визуализации (0-100%), но логируем абсолютные значения
+//            if ($totalPixels > 0) {
+//                // Для визуализации в интерфейсе - нормализуем до 100%
+//                $redHistogram = array_map(function($val) use ($totalPixels) {
+//                    return ($val / $totalPixels) * 100;
+//                }, $redHistogram);
+//
+//                $greenHistogram = array_map(function($val) use ($totalPixels) {
+//                    return ($val / $totalPixels) * 100;
+//                }, $greenHistogram);
+//
+//                $blueHistogram = array_map(function($val) use ($totalPixels) {
+//                    return ($val / $totalPixels) * 100;
+//                }, $blueHistogram);
+//
+//                $grayHistogram = array_map(function($val) use ($totalPixels) {
+//                    return ($val / $totalPixels) * 100;
+//                }, $grayHistogram);
+//            }
+
+            // ИСПРАВЛЕНИЕ 3: Логируем АБСОЛЮТНЫЕ значения, а не нормализованные
+            Log::info("Значения для уровня 39: R={$absoluteRed128}, G={$absoluteGreen128}, B={$absoluteBlue128}, Gray={$absoluteGray128}, TotalPixels={$totalPixels}, PercentAt128=" . ($absoluteRed128/$totalPixels*100));
+
+            // Дополнительная отладочная информация
+            $maxRed = max($redHistogram);
+            $maxGray = max($grayHistogram);
+            Log::info("Пиковые значения гистограммы: MaxRed={$maxRed}%, MaxGray={$maxGray}%");
+
             $histogramData = [
                 'red' => $redHistogram,
                 'green' => $greenHistogram,
                 'blue' => $blueHistogram,
-                'gray' => $grayHistogram
+                'gray' => $grayHistogram,
+                'metadata' => [
+                    'total_pixels' => $totalPixels,
+                    'width' => $width,
+                    'height' => $height,
+                    'sample_step' => $sampleStep
+                ]
             ];
 
-            // Создаем директорию для гистограмм если не существует
             Storage::disk('public')->makeDirectory('uploads/histograms');
 
             $histogramFileName = 'histogram_' . $type . '_' . Str::random(10) . '_' . time() . '.json';
@@ -208,7 +219,7 @@ class ImageProcessingController extends Controller
      */
     public function processImage(Request $request)
     {
-        // Убедимся, что запрос является AJAX
+        // Проверяем, ожидает ли клиент JSON-ответ (AJAX запрос)
         if (!$request->expectsJson()) {
             return response()->json(['error' => 'Требуется JSON запрос'], 400);
         }
@@ -224,7 +235,6 @@ class ImageProcessingController extends Controller
             $operation = $request->operation;
             $parameters = $request->parameters ?? [];
 
-            // Убедимся, что путь корректен
             if (!Storage::disk('public')->exists($imagePath)) {
                 Log::error("Изображение не найдено: " . $imagePath);
                 return response()->json(['error' => 'Изображение не найдено'], 404);
@@ -272,16 +282,12 @@ class ImageProcessingController extends Controller
         }
     }
 
-    /**
-     * Просветление изображения (исправленная версия для Intervention 3.x)
-     */
     private function applyBrightness($image, $parameters)
     {
         $brightness = $parameters['value'] ?? 0;
 
-        // Используем встроенный метод brightness для Intervention 3.x
-        // Intervention 3.x ожидает значение от -100 до 100
-        $normalizedBrightness = (int)($brightness / 2.55); // Конвертируем из диапазона -255..255 в -100..100
+        // Конвертируем значение из диапазона -255..255 в -100..100
+        $normalizedBrightness = (int)($brightness / 2.55);
 
         $image->brightness($normalizedBrightness);
 
@@ -289,7 +295,7 @@ class ImageProcessingController extends Controller
     }
 
     /**
-     * Частичное инвертирование по каналу (исправленная версия для Intervention 3.x)
+     * Частичное инвертирование по каналу
      */
     private function applyPartialInversion($image, $channelType)
     {
@@ -305,47 +311,57 @@ class ImageProcessingController extends Controller
                 $b = $color->blue()->value();
 
                 if ($channelType === 'partial_red') {
-                    $r = 255 - $r; // Инвертируем красный канал
+                    $r = 255 - $r;
                 } elseif ($channelType === 'partial_green') {
-                    $g = 255 - $g; // Инвертируем зеленый канал
+                    $g = 255 - $g;
                 }
 
-                // Создаем новый цвет и устанавливаем его
                 $newColor = new Color($r, $g, $b);
+
                 $image->drawPixel($x, $y, $newColor);
             }
         }
     }
 
     /**
-     * Пороговое преобразование (исправленная версия для Intervention 3.x)
+     * Пороговое преобразование
      */
     private function applyThreshold($image, $parameters)
     {
-        $type = $parameters['type'] ?? 'binary';
-        $threshold = $parameters['value'] ?? 128;
+        // Получаем тип порогового преобразования и значение порога
+        $type = $parameters['type'] ?? 'binary';   // Тип: 'binary' или 'slice'
+        $threshold = $parameters['value'] ?? 128;  // Значение порога (0-255)
 
         $width = $image->width();
         $height = $image->height();
 
+        // Проходим по каждому пикселю изображения
         for ($x = 0; $x < $width; $x++) {
             for ($y = 0; $y < $height; $y++) {
+                // Получаем цвет текущего пикселя
                 $color = $image->pickColor($x, $y);
 
+                // Извлекаем значения RGB-каналов
                 $r = $color->red()->value();
                 $g = $color->green()->value();
                 $b = $color->blue()->value();
 
-                $gray = (int)($r * 0.299 + $g * 0.587 + $b * 0.114);
+                // Вычисляем яркость пикселя по формуле NTSC
+                $gray = (int)round($r * 0.299 + $g * 0.587 + $b * 0.114);
+//                $gray = max(0, min(255, $gray));  // ограничиваем диапазон
 
+                // ДЛЯ ОТЛАДКИ: логируем различия
+//                if ($r != $g || $g != $b || $gray != $r) {
+//                    Log::info("Разные значения: R={$r}, G={$g}, B={$b}, Gray={$gray} at x={$x}, y={$y}");
+//                }
                 if ($type === 'binary') {
-                    // Бинарное изображение
+                    // Бинарное преобразование: выше порога - белый, ниже - черный
                     $value = $gray > $threshold ? 255 : 0;
                     $newColor = new Color($value, $value, $value);
                 } elseif ($type === 'slice') {
-                    // Яркостные срезы
+                    // Яркостные срезы: сохраняем оригинальный цвет в диапазоне ±20 от порога. Остальные пиксели затемняем в 2 раза
                     if ($gray >= $threshold - 20 && $gray <= $threshold + 20) {
-                        $newColor = $color; // Сохраняем оригинальный цвет
+                        $newColor = $color;
                     } else {
                         $grayValue = (int)($gray * 0.5);
                         $newColor = new Color($grayValue, $grayValue, $grayValue);
@@ -362,39 +378,36 @@ class ImageProcessingController extends Controller
     }
 
     /**
-     * Изменение контраста (исправленная версия для Intervention 3.x)
+     * Изменение контраста $factor = (259 * ($contrast + 255)) / (255 * (259 - $contrast));
+     *
+     * $newValue = ($value - 128) * $factor + 128;
+     */
+    /**
+     * Изменение контраста
      */
     private function applyContrast($image, $parameters)
     {
-        $type = $parameters['type'] ?? 'medium';
+        $contrast = $parameters['value'] ?? 0;
 
-        // Коэффициенты контраста для разных типов
-        $contrastMap = [
-            'low' => 10,
-            'medium' => 25,
-            'high' => 50
-        ];
+        Log::info('$contrast', (array) $contrast);
+        // Ограничиваем значение в диапазоне -100 до 100
+        $contrast = max(-100, min(100, $contrast));
 
-        $contrast = $contrastMap[$type] ?? 25;
-
-        // Используем встроенный метод contrast для Intervention 3.x
         $image->contrast($contrast);
 
-        return $this->saveProcessedImage($image, 'contrast', $type);
+        return $this->saveProcessedImage($image, 'contrast', $contrast);
     }
 
     /**
-     * Инвертирование изображения (исправленная версия для Intervention 3.x)
+     * Инвертирование изображения
      */
     private function applyInversion($image, $parameters)
     {
         $type = $parameters['type'] ?? 'full';
 
         if ($type === 'full') {
-            // Полное инвертирование с использованием встроенного метода
             $image->invert();
         } else {
-            // Частичное инвертирование
             $this->applyPartialInversion($image, $type);
         }
 
@@ -409,13 +422,10 @@ class ImageProcessingController extends Controller
         $fileName = $operation . '_' . Str::random(10) . '_' . time() . '.png';
         $filePath = 'uploads/processed/' . $fileName;
 
-        // Создаем директорию если не существует
         Storage::disk('public')->makeDirectory('uploads/processed');
 
-        // Сохраняем обработанное изображение
         $image->save(storage_path('app/public/' . $filePath));
 
-        // Создаем гистограмму для обработанного изображения
         $histogramPath = $this->createHistogram(storage_path('app/public/' . $filePath), $operation);
 
         return [
@@ -430,7 +440,7 @@ class ImageProcessingController extends Controller
      */
     public function getHistogramData(Request $request)
     {
-        // Убедимся, что запрос является AJAX
+        // Проверяем, ожидает ли клиент JSON-ответ (AJAX запрос)
         if (!$request->expectsJson()) {
             return response()->json(['error' => 'Требуется JSON запрос'], 400);
         }
@@ -444,13 +454,11 @@ class ImageProcessingController extends Controller
 
             Log::info("Запрос данных гистограммы: {$url}");
 
-            // Извлекаем путь из URL
             $parsedUrl = parse_url($url);
             $path = $parsedUrl['path'] ?? '';
 
-            // Убираем начальный /storage/ из пути
             if (strpos($path, '/storage/') === 0) {
-                $path = substr($path, 9); // убираем '/storage/'
+                $path = substr($path, 9);
             }
 
             Log::info("Извлеченный путь: {$path}");
@@ -489,12 +497,10 @@ class ImageProcessingController extends Controller
         try {
             $filePath = $request->file_path;
 
-            // Удаляем основное изображение
             if (Storage::disk('public')->exists($filePath)) {
                 Storage::disk('public')->delete($filePath);
             }
 
-            // Удаляем обработанные изображения и гистограммы
             $fileName = basename($filePath);
             $baseFileName = pathinfo($fileName, PATHINFO_FILENAME);
 

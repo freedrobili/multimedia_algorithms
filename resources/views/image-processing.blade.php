@@ -35,6 +35,15 @@
             padding: 15px;
             margin: 10px 0;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            height: 250px; /* Увеличиваем высоту */
+            position: relative;
+            overflow: hidden;
+        }
+
+        .histogram-container canvas {
+            width: 100% !important;
+            height: calc(100% - 40px) !important; /* Учитываем место для заголовка */
+            display: block;
         }
         .operation-section {
             background: #f8f9fa;
@@ -219,19 +228,20 @@
                             <!-- 4. Изменение контраста -->
                             <div class="operation-section" id="contrastSection">
                                 <h5>4. Изменение контраста</h5>
-                                <div class="mb-3">
-                                    <label class="form-label">Уровень контраста:</label>
-                                    <div>
-                                        <input type="radio" class="btn-check" name="contrastType" id="lowContrast" value="low">
-                                        <label class="btn btn-outline-secondary" for="lowContrast">Низкий</label>
 
-                                        <input type="radio" class="btn-check" name="contrastType" id="mediumContrast" value="medium" checked>
-                                        <label class="btn btn-outline-secondary" for="mediumContrast">Средний</label>
-
-                                        <input type="radio" class="btn-check" name="contrastType" id="highContrast" value="high">
-                                        <label class="btn btn-outline-secondary" for="highContrast">Высокий</label>
+                                <!-- Убираем радиокнопки и добавляем ползунок -->
+                                <div class="slider-container">
+                                    <label for="contrastSlider" class="form-label">Уровень контраста: <span id="contrastValue">0</span></label>
+                                    <input type="range" class="form-range" id="contrastSlider" min="-100" max="100" value="0">
+                                    <div class="d-flex justify-content-between small text-muted">
+                                        <span>-100</span>
+                                        <span>Низкий</span>
+                                        <span>0</span>
+                                        <span>Высокий</span>
+                                        <span>+100</span>
                                     </div>
                                 </div>
+
                                 <button class="btn btn-outline-primary" onclick="applyOperation('contrast')">
                                     Применить изменение контраста
                                 </button>
@@ -266,13 +276,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // Функция загрузки и отображения гистограммы (исправленная версия)
-    // Глобальные переменные для управления гистограммами
     let currentHistogramData = null;
     let currentHistogramLabel = '';
 
-    // Функция загрузки и отображения гистограммы (компактная версия)
-    // Функция загрузки и отображения гистограммы (компактная версия)
     async function loadAndDisplayHistogram(histogramUrl, canvasId, label, isCompact = true) {
         try {
             console.log('Загрузка гистограммы:', histogramUrl);
@@ -320,22 +326,34 @@
                 return;
             }
 
-            // ЯВНО УСТАНАВЛИВАЕМ РАЗМЕРЫ CANVAS
             const container = canvas.parentElement;
-            const containerWidth = container.clientWidth;
-            const containerHeight = container.clientHeight;
 
-            canvas.style.width = containerWidth + 'px';
-            canvas.style.height = containerHeight + 'px';
-            canvas.width = containerWidth;
-            canvas.height = containerHeight;
-
-            const ctx = canvas.getContext('2d');
-
-            // Убедимся, что предыдущий график уничтожен
+            // УНИЧТОЖАЕМ ПРЕДЫДУЩИЙ ГРАФИК
             if (canvas.chart) {
                 canvas.chart.destroy();
+                canvas.chart = null;
             }
+
+            // ОЧИЩАЕМ CANVAS
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const containerStyle = window.getComputedStyle(container);
+            const paddingLeft = parseInt(containerStyle.paddingLeft) || 0;
+            const paddingRight = parseInt(containerStyle.paddingRight) || 0;
+            const paddingTop = parseInt(containerStyle.paddingTop) || 0;
+            const paddingBottom = parseInt(containerStyle.paddingBottom) || 0;
+
+            const availableWidth = container.clientWidth - paddingLeft - paddingRight;
+            const availableHeight = container.clientHeight - paddingTop - paddingBottom;
+
+            // Устанавливаем размеры canvas
+            canvas.width = availableWidth;
+            canvas.height = availableHeight;
+            canvas.style.width = availableWidth + 'px';
+            canvas.style.height = availableHeight + 'px';
+
+            console.log('Размеры контейнера:', availableWidth, 'x', availableHeight);
 
             // Сохраняем данные для возможности увеличения
             canvas.histogramData = histogramData;
@@ -346,42 +364,66 @@
                 showEnlargedHistogram(histogramData, label);
             });
 
-            // Настройки для компактного отображения
             const compactOptions = {
-                responsive: false, // ВАЖНО: отключаем responsive mode
+                responsive: true,
                 maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        left: 5,
+                        right: 5,
+                        top: 5,
+                        bottom: 5
+                    }
+                },
                 plugins: {
-                    title: {
-                        display: false
-                    },
                     legend: {
                         display: false
                     },
                     tooltip: {
                         enabled: false
+                    },
+                    title: {
+                        display: false
                     }
                 },
                 scales: {
                     x: {
                         display: false,
                         min: 0,
-                        max: 255
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            display: false
+                        }
                     },
                     y: {
                         display: false,
                         beginAtZero: true,
-                        min: 0,
-                        max: 100
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            display: false
+                        }
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 0,
+                        hoverRadius: 0
+                    },
+                    line: {
+                        borderWidth: 1,
+                        tension: 0.4
                     }
                 },
                 interaction: {
                     intersect: false,
                     mode: 'index'
                 },
-                elements: {
-                    point: {
-                        radius: 0
-                    }
+                animation: {
+                    duration: 0
                 }
             };
 
@@ -419,12 +461,20 @@
                     y: {
                         title: {
                             display: true,
-                            text: 'Частота (%)'
+                            text: 'Частота пикселей'
                         },
                         beginAtZero: true,
-                        min: 0,
-                        max: 100
+                        ticks: {
+                            callback: function(value) {
+                                return value; // выводим реальные значения количества пикселей
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+
                     }
+
                 },
                 interaction: {
                     intersect: false,
@@ -440,7 +490,6 @@
 
             const options = isCompact ? compactOptions : fullOptions;
 
-            // Создаем данные для Chart.js
             const labels = Array.from({length: 256}, (_, i) => i);
 
             canvas.chart = new Chart(ctx, {
@@ -455,7 +504,7 @@
                             backgroundColor: 'rgba(255, 0, 0, 0.1)',
                             borderWidth: 1,
                             tension: 0.4,
-                            pointRadius: 0
+                            fill: false
                         },
                         {
                             label: 'Зеленый канал',
@@ -464,7 +513,7 @@
                             backgroundColor: 'rgba(0, 255, 0, 0.1)',
                             borderWidth: 1,
                             tension: 0.4,
-                            pointRadius: 0
+                            fill: false
                         },
                         {
                             label: 'Синий канал',
@@ -473,7 +522,7 @@
                             backgroundColor: 'rgba(0, 0, 255, 0.1)',
                             borderWidth: 1,
                             tension: 0.4,
-                            pointRadius: 0
+                            fill: false
                         },
                         {
                             label: 'Яркость',
@@ -482,14 +531,22 @@
                             backgroundColor: 'rgba(128, 128, 128, 0.1)',
                             borderWidth: 1,
                             tension: 0.4,
-                            pointRadius: 0
+                            fill: false
                         }
                     ]
                 },
                 options: options
             });
 
-            console.log('Гистограмма отображена успешно. Размеры:', containerWidth, 'x', containerHeight);
+            // ПЕРЕРИСОВЫВАЕМ ГРАФИК С УЧЕТОМ НОВЫХ РАЗМЕРОВ
+            setTimeout(() => {
+                if (canvas.chart) {
+                    canvas.chart.resize();
+                    canvas.chart.update('none'); // Обновляем без анимации
+                }
+            }, 50);
+
+            console.log('Гистограмма отображена успешно. Размеры:', availableWidth, 'x', availableHeight);
 
         } catch (error) {
             console.error('Ошибка загрузки гистограммы:', error);
@@ -501,12 +558,12 @@
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = '#6c757d';
                 ctx.textAlign = 'center';
+                ctx.font = '12px Arial';
                 ctx.fillText('Гистограмма недоступна', canvas.width / 2, canvas.height / 2);
             }
         }
     }
 
-    // Функция показа увеличенной гистограммы в модальном окне
     function showEnlargedHistogram(histogramData, label) {
         currentHistogramData = histogramData;
         currentHistogramLabel = label;
@@ -524,6 +581,7 @@
     }
 
     // Создание увеличенной гистограммы
+    // Создание увеличенной гистограммы с правильными значениями на оси Y
     function createEnlargedHistogram(histogramData, label) {
         const canvas = document.getElementById('enlargedHistogram');
         if (!canvas) return;
@@ -536,6 +594,23 @@
         }
 
         const labels = Array.from({length: 256}, (_, i) => i);
+
+        // Находим максимальное значение для масштабирования оси Y
+        const maxRed = Math.max(...histogramData.red);
+        const maxGreen = Math.max(...histogramData.green);
+        const maxBlue = Math.max(...histogramData.blue);
+        const maxGray = Math.max(...histogramData.gray);
+        const maxValue = Math.max(maxRed, maxGreen, maxBlue, maxGray);
+
+        // Форматируем большие числа для читаемости
+        function formatNumber(value) {
+            if (value >= 1000000) {
+                return (value / 1000000).toFixed(1) + 'M';
+            } else if (value >= 1000) {
+                return (value / 1000).toFixed(1) + 'K';
+            }
+            return value.toString();
+        }
 
         canvas.chart = new Chart(ctx, {
             type: 'line',
@@ -621,9 +696,9 @@
                         callbacks: {
                             label: function(context) {
                                 const label = context.dataset.label || '';
-                                const value = context.parsed.y.toFixed(2);
+                                const value = context.parsed.y;
                                 const brightness = context.dataIndex;
-                                return `${label}: ${value}% (яркость: ${brightness})`;
+                                return `${label}: ${value.toLocaleString()} пикселей (яркость: ${brightness})`;
                             }
                         }
                     }
@@ -652,21 +727,20 @@
                     y: {
                         title: {
                             display: true,
-                            text: 'Частота (%)',
+                            text: 'Количество пикселей',
                             font: {
                                 size: 14,
                                 weight: 'bold'
                             }
                         },
                         beginAtZero: true,
-                        min: 0,
-                        max: 100,
+                        suggestedMax: maxValue * 1.1, // 10% запас сверху
                         grid: {
                             color: 'rgba(0, 0, 0, 0.1)'
                         },
                         ticks: {
-                            font: {
-                                size: 12
+                            callback: function(value) {
+                                return value; // выводим реальные значения количества пикселей
                             }
                         }
                     }
@@ -854,6 +928,14 @@
                 thresholdValue.textContent = this.value;
             });
         }
+        // ДОБАВЬТЕ ЭТОТ КОД ДЛЯ КОНТРАСТА
+        const contrastSlider = document.getElementById('contrastSlider');
+        const contrastValue = document.getElementById('contrastValue');
+        if (contrastSlider) {
+            contrastSlider.addEventListener('input', function() {
+                contrastValue.textContent = this.value;
+            });
+        }
 
         // Загрузка и отображение гистограммы исходного изображения
         const originalHistogramUrl = document.getElementById('originalHistogramUrl');
@@ -885,7 +967,8 @@
                 parameters.value = parseInt(document.getElementById('thresholdSlider').value);
                 break;
             case 'contrast':
-                parameters.type = document.querySelector('input[name="contrastType"]:checked').value;
+                // ИСПРАВЛЕННАЯ СТРОКА - используем ползунок вместо радиокнопок
+                parameters.value = parseInt(document.getElementById('contrastSlider').value);
                 break;
         }
 
@@ -897,8 +980,8 @@
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                    'X-Requested-With': 'XMLHttpRequest', // Важно для Laravel
-                    'Accept': 'application/json' // Убедимся, что ожидаем JSON
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
                 },
                 body: JSON.stringify({
                     image_path: imagePath,
