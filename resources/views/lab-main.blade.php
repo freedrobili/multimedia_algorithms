@@ -69,6 +69,10 @@
             border-top: 5px solid #ff6b6b;
         }
 
+        .lab-card-3 {
+            border-top: 5px solid #45b7d1;
+        }
+
         .card-body {
             padding: 40px 30px;
             text-align: center;
@@ -85,6 +89,10 @@
 
         .lab-card-2 .lab-icon {
             color: #ff6b6b;
+        }
+
+        .lab-card-3 .lab-icon {
+            color: #45b7d1;
         }
 
         .lab-card h3 {
@@ -133,6 +141,18 @@
             box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
         }
 
+        .btn-lab-3 {
+            background: linear-gradient(45deg, #45b7d1, #96c93d);
+            color: white;
+        }
+
+        .btn-lab-3:hover {
+            background: linear-gradient(45deg, #3ca8c1, #85b836);
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(69, 183, 209, 0.4);
+        }
+
         .features-section {
             background: #f8f9fa;
             padding: 40px 0;
@@ -166,6 +186,18 @@
             border: 2px solid #e9ecef;
         }
 
+        .lab-badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #e74c3c;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
         @media (max-width: 768px) {
             .header-section h1 {
                 font-size: 2rem;
@@ -173,6 +205,10 @@
 
             .card-body {
                 padding: 30px 20px;
+            }
+
+            .lab-card {
+                margin-bottom: 25px;
             }
         }
     </style>
@@ -184,7 +220,7 @@
         <div class="header-section">
             <div class="container">
                 <h1>Лабораторные работы</h1>
-                <p class="lead">По обработке и преобразованию цветов</p>
+                <p class="lead">По обработке и преобразованию цветов и алгоритмам сжатия</p>
             </div>
         </div>
 
@@ -192,7 +228,8 @@
         <div class="lab-links-section">
             <div class="container">
                 <div class="row justify-content-center">
-                    <div class="col-lg-5 col-md-6 mb-4">
+                    <!-- ЛР1 -->
+                    <div class="col-lg-4 col-md-6 mb-4">
                         <div class="lab-card lab-card-1">
                             <div class="card-body">
                                 <div class="lab-icon">
@@ -208,7 +245,8 @@
                         </div>
                     </div>
 
-                    <div class="col-lg-5 col-md-6 mb-4">
+                    <!-- ЛР2 -->
+                    <div class="col-lg-4 col-md-6 mb-4">
                         <div class="lab-card lab-card-2">
                             <div class="card-body">
                                 <div class="lab-icon">
@@ -223,6 +261,23 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- ЛР3 -->
+                    <div class="col-lg-4 col-md-6 mb-4">
+                        <div class="lab-card lab-card-3">
+                            <div class="card-body">
+                                <div class="lab-icon">
+                                    <i class="fas fa-code"></i>
+                                </div>
+                                <h3>Лабораторная работа 3</h3>
+                                <p>Алгоритм RLE кодирования: сжатие текстовых данных и изображений. Реализация алгоритма кодирования длин серий с анализом эффективности.</p>
+                                <div class="color-preview" style="background: linear-gradient(45deg, #45b7d1, #96c93d, #45b7d1);"></div>
+                                <a href="/lab3" class="btn btn-lab btn-lab-3">
+                                    Перейти к работе 3
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -231,26 +286,33 @@
         <div class="features-section">
             <div class="container">
                 <div class="row">
-                    <div class="col-md-4 feature-item">
+                    <div class="col-md-3 feature-item">
                         <div class="feature-icon">
                             <i class="fas fa-exchange-alt"></i>
                         </div>
                         <h5>Конвертация форматов</h5>
                         <p>Преобразование между HEX, RGB, HSL и другими цветовыми моделями</p>
                     </div>
-                    <div class="col-md-4 feature-item">
+                    <div class="col-md-3 feature-item">
                         <div class="feature-icon">
                             <i class="fas fa-eye-dropper"></i>
                         </div>
                         <h5>Визуализация</h5>
                         <p>Наглядное представление цветов и их преобразований</p>
                     </div>
-                    <div class="col-md-4 feature-item">
+                    <div class="col-md-3 feature-item">
                         <div class="feature-icon">
                             <i class="fas fa-cogs"></i>
                         </div>
                         <h5>Расширенный функционал</h5>
                         <p>Дополнительные инструменты для работы с цветовыми пространствами</p>
+                    </div>
+                    <div class="col-md-3 feature-item">
+                        <div class="feature-icon">
+                            <i class="fas fa-compress-alt"></i>
+                        </div>
+                        <h5>Алгоритмы сжатия</h5>
+                        <p>Реализация алгоритмов RLE для текста и изображений</p>
                     </div>
                 </div>
             </div>
@@ -261,7 +323,7 @@
 <!-- Футер -->
 <div class="footer">
     <div class="container">
-        <p>&copy; 2024 Лабораторные работы по обработке цвета. Все права защищены.</p>
+        <p>&copy; 2024 Лабораторные работы по обработке цвета и алгоритмам сжатия. Все права защищены.</p>
     </div>
 </div>
 
@@ -277,16 +339,18 @@
     document.addEventListener('DOMContentLoaded', function() {
         const style = document.createElement('style');
         style.textContent = `
-                .fas::before {
-                    font-family: 'Segoe UI', sans-serif;
-                    font-weight: 900;
-                }
-                .fa-palette::before { content: '🎨'; }
-                .fa-sliders-h::before { content: '⚙️'; }
-                .fa-exchange-alt::before { content: '🔄'; }
-                .fa-eye-dropper::before { content: '👁️'; }
-                .fa-cogs::before { content: '🔧'; }
-            `;
+            .fas::before {
+                font-family: 'Segoe UI', sans-serif;
+                font-weight: 900;
+            }
+            .fa-palette::before { content: '🎨'; }
+            .fa-sliders-h::before { content: '⚙️'; }
+            .fa-code::before { content: '💻'; }
+            .fa-exchange-alt::before { content: '🔄'; }
+            .fa-eye-dropper::before { content: '👁️'; }
+            .fa-cogs::before { content: '🔧'; }
+            .fa-compress-alt::before { content: '📦'; }
+        `;
         document.head.appendChild(style);
     });
 </script>

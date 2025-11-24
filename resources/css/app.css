@@ -67,3 +67,17 @@
     z-index: 1000;
     display: none;
 }
+
+.btn-outline-custom {
+    border: 1px solid #57568c !important;
+    background-color: transparent;
+    color: #57568c;
+    padding: 6px 14px;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+.btn-outline-custom:hover {
+    background-color: #57568c;
+    color: white;
+}
