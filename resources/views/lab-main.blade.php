@@ -73,6 +73,10 @@
             border-top: 5px solid #45b7d1;
         }
 
+        .lab-card-4 {
+            border-top: 5px solid #96c93d;
+        }
+
         .card-body {
             padding: 40px 30px;
             text-align: center;
@@ -93,6 +97,10 @@
 
         .lab-card-3 .lab-icon {
             color: #45b7d1;
+        }
+
+        .lab-card-4 .lab-icon {
+            color: #96c93d;
         }
 
         .lab-card h3 {
@@ -151,6 +159,18 @@
             color: white;
             transform: scale(1.05);
             box-shadow: 0 5px 15px rgba(69, 183, 209, 0.4);
+        }
+
+        .btn-lab-4 {
+            background: linear-gradient(45deg, #96c93d, #45b7d1);
+            color: white;
+        }
+
+        .btn-lab-4:hover {
+            background: linear-gradient(45deg, #85b836, #3ca8c1);
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(150, 201, 61, 0.4);
         }
 
         .features-section {
@@ -229,7 +249,7 @@
             <div class="container">
                 <div class="row justify-content-center">
                     <!-- ЛР1 -->
-                    <div class="col-lg-4 col-md-6 mb-4">
+                    <div class="col-lg-3 col-md-6 mb-4">
                         <div class="lab-card lab-card-1">
                             <div class="card-body">
                                 <div class="lab-icon">
@@ -246,7 +266,7 @@
                     </div>
 
                     <!-- ЛР2 -->
-                    <div class="col-lg-4 col-md-6 mb-4">
+                    <div class="col-lg-3 col-md-6 mb-4">
                         <div class="lab-card lab-card-2">
                             <div class="card-body">
                                 <div class="lab-icon">
@@ -263,7 +283,7 @@
                     </div>
 
                     <!-- ЛР3 -->
-                    <div class="col-lg-4 col-md-6 mb-4">
+                    <div class="col-lg-3 col-md-6 mb-4">
                         <div class="lab-card lab-card-3">
                             <div class="card-body">
                                 <div class="lab-icon">
@@ -274,6 +294,23 @@
                                 <div class="color-preview" style="background: linear-gradient(45deg, #45b7d1, #96c93d, #45b7d1);"></div>
                                 <a href="/lab3" class="btn btn-lab btn-lab-3">
                                     Перейти к работе 3
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ЛР4 -->
+                    <div class="col-lg-3 col-md-6 mb-4">
+                        <div class="lab-card lab-card-4">
+                            <div class="card-body">
+                                <div class="lab-icon">
+                                    <i class="fas fa-compress-arrows-alt"></i>
+                                </div>
+                                <h3>Лабораторная работа 4</h3>
+                                <p>Алгоритм LZW сжатия: словарное сжатие текста и изображений. Реализация алгоритма Лемпеля-Зива-Велча с анализом эффективности сжатия.</p>
+                                <div class="color-preview" style="background: linear-gradient(45deg, #96c93d, #45b7d1, #96c93d);"></div>
+                                <a href="/lab4" class="btn btn-lab btn-lab-4">
+                                    Перейти к работе 4
                                 </a>
                             </div>
                         </div>
@@ -312,7 +349,7 @@
                             <i class="fas fa-compress-alt"></i>
                         </div>
                         <h5>Алгоритмы сжатия</h5>
-                        <p>Реализация алгоритмов RLE для текста и изображений</p>
+                        <p>Реализация алгоритмов RLE и LZW для текста и изображений</p>
                     </div>
                 </div>
             </div>
@@ -346,6 +383,7 @@
             .fa-palette::before { content: '🎨'; }
             .fa-sliders-h::before { content: '⚙️'; }
             .fa-code::before { content: '💻'; }
+            .fa-compress-arrows-alt::before { content: '📚'; }
             .fa-exchange-alt::before { content: '🔄'; }
             .fa-eye-dropper::before { content: '👁️'; }
             .fa-cogs::before { content: '🔧'; }

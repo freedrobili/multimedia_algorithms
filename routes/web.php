@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\ColorController;
+use App\Http\Controllers\ImageFilterController;
 use App\Http\Controllers\ImageProcessingController;
 use App\Http\Controllers\LabController;
+use App\Http\Controllers\LzwController;
 use App\Http\Controllers\RleController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,3 +32,14 @@ Route::delete('/image-processing/delete', [ImageProcessingController::class, 'de
 Route::get('/lab3', [RleController::class, 'index'])->name('rle.index');
 Route::post('/lab3/encode-text', [RleController::class, 'encodeText']);
 Route::post('/lab3/encode-image', [RleController::class, 'encodeImage']);
+
+// ЛР 4 - LZW
+Route::prefix('lab4')->group(function () {
+    Route::get('/', [LzwController::class, 'index']);
+    Route::post('/encode-text', [LzwController::class, 'encodeText']);
+    Route::post('/decode-text', [LzwController::class, 'decodeText']);
+    Route::post('/encode-image', [LzwController::class, 'encodeImage']);
+    Route::post('/decode-image', [LzwController::class, 'decodeImage']); // ← ЭТОЙ СТРОКИ НЕ ХВАТАЕТ
+});
+
+

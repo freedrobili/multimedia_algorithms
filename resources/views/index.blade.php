@@ -591,8 +591,6 @@
     `;
         container.appendChild(legend);
     }
-
-
 </script>
 </body>
 </html>
