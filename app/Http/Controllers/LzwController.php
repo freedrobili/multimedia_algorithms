@@ -264,7 +264,7 @@ class LzwController extends Controller
             }
 
             // СОЗДАЕМ ИЗОБРАЖЕНИЕ ПРАВИЛЬНЫМ СПОСОБОМ
-            Log::info("Creating image using alternative method...");
+            Log::info("Creating image using GD...");
 
             try {
                 // Создаем изображение вручную используя GD
@@ -298,21 +298,28 @@ class LzwController extends Controller
 
                 Log::info('Pixel setting completed');
 
-                // Сохранение изображения
+                // Сохранение изображения - ИСПРАВЛЕН ПУТЬ
                 $outFilename = pathinfo($filename, PATHINFO_FILENAME) . '_decoded.png';
-                $outPath = 'public/' . $outFilename;
-                Log::info("Saving image: " . $outPath);
+
+                // Сохраняем прямо в public storage (без подпапки private)
+                $outPath = $outFilename; // Просто имя файла, без 'public/'
+
+                Log::info("Saving image to public storage: " . $outPath);
 
                 // Сохраняем через временный файл
-                $tempPath = storage_path('app/temp_' . $outFilename);
+                $tempPath = storage_path('app/public/' . $outFilename);
                 imagepng($image, $tempPath);
                 imagedestroy($image);
 
-                // Копируем в storage
-                Storage::put($outPath, file_get_contents($tempPath));
-                unlink($tempPath); // Удаляем временный файл
+                Log::info('Image saved successfully to: ' . $tempPath);
 
-                Log::info('Image saved successfully');
+                // Проверяем, что файл создан
+                if (!file_exists($tempPath)) {
+                    throw new \Exception('Failed to create image file');
+                }
+
+                $fileSize = filesize($tempPath);
+                Log::info('File created, size: ' . $fileSize . ' bytes');
 
             } catch (\Exception $e) {
                 Log::error('Image creation failed: ' . $e->getMessage());
@@ -323,9 +330,11 @@ class LzwController extends Controller
             }
 
             Log::info('=== PROCESS COMPLETED SUCCESSFULLY ===');
+
+            // Возвращаем только имя файла, без пути 'public/'
             return response()->json([
                 'success' => true,
-                'restored_image' => $outPath,
+                'restored_image' => $outFilename, // Только имя файла
                 'width' => $width,
                 'height' => $height,
                 'pixels_restored' => count($bytes),

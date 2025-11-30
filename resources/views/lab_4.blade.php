@@ -8,16 +8,68 @@
     <!-- CSRF token для JS -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
+    <!-- Подключаем CSS файл -->
+    <link href="{{ asset('css/app.css') }}" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
     <style>
-        .nav-tabs .nav-link.active { font-weight: bold; background-color: #f8f9fa; }
+        /* Стили для вкладок с цветом #57568c */
+        .nav-tabs .nav-link {
+            color: #57568c !important;
+            font-weight: 500;
+        }
+
+        .nav-tabs .nav-link.active {
+            color: #57568c !important;
+            font-weight: bold;
+            background-color: #f8f9fa;
+            border-bottom-color: #57568c !important;
+        }
+
+        .nav-tabs .nav-link:hover {
+            color: #454472 !important;
+            border-color: #e9ecef #e9ecef #57568c;
+        }
+
         .step-card { border-left: 4px solid #007bff; margin-bottom: 10px; background-color: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
         .dictionary-item { padding: 4px 8px; margin: 3px; background-color: #f8f9fa; border-radius: 4px; font-family: monospace; display: inline-block; }
-        /*.stats-card { background: linear-gradient(135deg, #b0b1b4 0%, #f8f8f8 100%); color: white; }*/
         pre.code-block { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
 
         /* ДОБАВЬТЕ ЭТИ СТИЛИ */
         .card-body { color: #2c3e50; font-weight: 500; }
+
+        /* Дополнительные стили для кнопок если нужно */
+        .btn-custom {
+            border: 1px solid #57568c !important;
+            background-color: transparent;
+            color: #57568c;
+            padding: 8px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .btn-custom:hover {
+            background-color: #57568c;
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary-custom {
+            border: 1px solid #57568c !important;
+            background-color: #57568c;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary-custom:hover {
+            background-color: #454472;
+            border-color: #454472 !important;
+            color: white;
+            transform: translateY(-1px);
+        }
     </style>
 </head>
 <body>
@@ -28,7 +80,6 @@
         <div class="nav nav-tabs" id="nav-tab" role="tablist">
             <button class="nav-link active" id="nav-text-tab" data-bs-toggle="tab" data-bs-target="#nav-text" type="button" role="tab">Текст</button>
             <button class="nav-link" id="nav-image-tab" data-bs-toggle="tab" data-bs-target="#nav-image" type="button" role="tab">Изображение</button>
-            <button class="nav-link" id="nav-theory-tab" data-bs-toggle="tab" data-bs-target="#nav-theory" type="button" role="tab">Теория</button>
         </div>
     </nav>
 
@@ -41,7 +92,6 @@
                     <div class="card mb-3">
                         <div class="card-header"><h5 class="mb-0">Кодирование текста</h5></div>
                         <div class="card-body">
-                            <!-- IMPORTANT: action указывает реальный URL; method=POST и @csrf на всякий -->
                             <form id="encodeForm" action="/lab4/encode-text" method="POST">
                                 @csrf
                                 <div class="mb-3">
@@ -52,7 +102,7 @@
                                     <input type="checkbox" class="form-check-input" name="show_steps" id="showSteps">
                                     <label class="form-check-label" for="showSteps">Показать шаги выполнения</label>
                                 </div>
-                                <button type="submit" class="btn btn-primary" id="encodeBtn">Закодировать</button>
+                                <button type="submit" class="btn btn-primary-custom" id="encodeBtn">Закодировать</button>
                             </form>
                         </div>
                     </div>
@@ -71,7 +121,7 @@
                                     <input type="checkbox" class="form-check-input" name="show_steps" id="showDecodeSteps">
                                     <label class="form-check-label" for="showDecodeSteps">Показать шаги выполнения</label>
                                 </div>
-                                <button type="submit" class="btn btn-success" id="decodeBtn">Декодировать</button>
+                                <button type="submit" class="btn btn-custom" id="decodeBtn">Декодировать</button>
                             </form>
                         </div>
                     </div>
@@ -97,7 +147,7 @@
                                     <label class="form-label">Выберите изображение:</label>
                                     <input type="file" class="form-control" name="image" accept="image/*" required>
                                 </div>
-                                <button type="submit" class="btn btn-primary" id="imageEncodeBtn">Закодировать изображение</button>
+                                <button type="submit" class="btn btn-primary-custom" id="imageEncodeBtn">Закодировать изображение</button>
                             </form>
                         </div>
                     </div>
@@ -112,7 +162,7 @@
                                     <input type="text" class="form-control" name="filename" placeholder="example_lzw_encoded.json">
                                     <div class="form-text">Например, файл, который вернул метод кодирования изображения.</div>
                                 </div>
-                                <button type="submit" class="btn btn-success" id="imageDecodeBtn">Восстановить изображение</button>
+                                <button type="submit" class="btn btn-custom" id="imageDecodeBtn">Восстановить изображение</button>
                             </form>
                         </div>
                     </div>
@@ -120,16 +170,6 @@
 
                 <div class="col-md-6">
                     <div id="imageResults"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Теория -->
-        <div class="tab-pane fade" id="nav-theory" role="tabpanel">
-            <div class="card">
-                <div class="card-body">
-                    <h4>Алгоритм LZW (Lempel–Ziv–Welch)</h4>
-                    <p>Краткое описание и пример см. в интерфейсе.</p>
                 </div>
             </div>
         </div>
@@ -307,14 +347,33 @@
             const compression = data.compression_ratio ?? 0;
 
             let html = `<div class="card stats-card mb-3"><div class="card-body">
-                        <h5>Результаты сжатия изображения</h5>
-                        <p><strong>Биты до сжатия:</strong> ${escapeHtml(String(originalBits))}</p>
-                        <p><strong>Биты после сжатия:</strong> ${escapeHtml(String(encodedBits))}</p>
-                        <p><strong>Степень сжатия:</strong> ${escapeHtml(String(compression))}%</p>
-                        <p><strong>Пикселей:</strong> ${escapeHtml(String(data.pixels_count || 0))}</p>
-                        <p><strong>Кодов:</strong> ${escapeHtml(String(data.codes_count || 0))}</p>
-                        ${data.encoded_filename ? `<p><strong>JSON:</strong> ${escapeHtml(String(data.encoded_filename))}</p>` : ''}
-                    </div></div>`;
+                <h5>Результаты сжатия изображения</h5>
+                <p><strong>Биты до сжатия:</strong> ${escapeHtml(String(originalBits))}</p>
+                <p><strong>Биты после сжатия:</strong> ${escapeHtml(String(encodedBits))}</p>
+                <p><strong>Степень сжатия:</strong> ${escapeHtml(String(compression))}%</p>
+                <p><strong>Пикселей:</strong> ${escapeHtml(String(data.pixels_count || 0))}</p>
+                <p><strong>Кодов:</strong> ${escapeHtml(String(data.codes_count || 0))}</p>
+                ${data.encoded_filename ? `<p><strong>JSON:</strong> ${escapeHtml(String(data.encoded_filename))}</p>` : ''}
+            </div></div>`;
+
+            // Если есть исходное изображение, показываем его
+            if (data.original_image) {
+                const imageUrl = `/storage/${data.original_image.replace('public/', '')}`;
+                html += `
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6>Исходное изображение</h6>
+                </div>
+                <div class="card-body text-center">
+                    <img src="${imageUrl}"
+                         alt="Исходное изображение"
+                         class="img-fluid rounded border"
+                         style="max-height: 300px; object-fit: contain;">
+                </div>
+            </div>
+        `;
+            }
+
             container.innerHTML = html;
         }
 
@@ -366,6 +425,7 @@
         });
 
         // Декодирование изображения
+        // Декодирование изображения
         document.getElementById('imageDecodeForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const form = e.target;
@@ -377,9 +437,33 @@
                     showError(resultsContainer, data.error);
                     return;
                 }
-                // Показать успех и путь к восстановленному изображению (как дал контроллер)
+
+                // Показать успех и изображение
                 let html = `<div class="alert alert-success">Изображение восстановлено: <strong>${escapeHtml(data.restored_image || '')}</strong></div>`;
                 html += `<p>Размер: ${escapeHtml(String(data.width))} × ${escapeHtml(String(data.height))}, пикселей восстановлено: ${escapeHtml(String(data.pixels_restored || 0))}</p>`;
+
+                // ДОБАВЛЯЕМ ОТОБРАЖЕНИЕ ИЗОБРАЖЕНИЯ
+                if (data.restored_image) {
+                    // Создаем URL для доступа к изображению из storage
+                    const imageUrl = `/storage/${data.restored_image.replace('public/', '')}`;
+                    html += `
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6>Восстановленное изображение</h6>
+                    </div>
+                    <div class="card-body text-center">
+                        <img src="${imageUrl}"
+                             alt="Восстановленное изображение"
+                             class="img-fluid rounded border"
+                             style="max-height: 500px; object-fit: contain;">
+                        <div class="mt-2">
+                            <small class="text-muted">${data.width} × ${data.height} пикселей</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+                }
+
                 resultsContainer.innerHTML = html;
             } catch (err) {
                 console.error(err);
