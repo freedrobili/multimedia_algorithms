@@ -77,6 +77,10 @@
             border-top: 5px solid #96c93d;
         }
 
+        .lab-card-5 {
+            border-top: 5px solid #ffa36c;
+        }
+
         .card-body {
             padding: 40px 30px;
             text-align: center;
@@ -101,6 +105,10 @@
 
         .lab-card-4 .lab-icon {
             color: #96c93d;
+        }
+
+        .lab-card-5 .lab-icon {
+            color: #ffa36c;
         }
 
         .lab-card h3 {
@@ -173,6 +181,18 @@
             box-shadow: 0 5px 15px rgba(150, 201, 61, 0.4);
         }
 
+        .btn-lab-5 {
+            background: linear-gradient(45deg, #ffa36c, #ffe66d);
+            color: white;
+        }
+
+        .btn-lab-5:hover {
+            background: linear-gradient(45deg, #ff8a50, #ffd700);
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(255, 163, 108, 0.4);
+        }
+
         .features-section {
             background: #f8f9fa;
             padding: 40px 0;
@@ -240,7 +260,7 @@
         <div class="header-section">
             <div class="container">
                 <h1>Лабораторные работы</h1>
-                <p class="lead">По обработке и преобразованию цветов и алгоритмам сжатия</p>
+                <p class="lead">По обработке и преобразованию цветов, алгоритмам сжатия и фильтрации изображений</p>
             </div>
         </div>
 
@@ -315,52 +335,69 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- ЛР5 -->
+                    <div class="col-lg-3 col-md-6 mb-4">
+                        <div class="lab-card lab-card-5">
+                            <div class="card-body">
+                                <div class="lab-icon">
+                                    <i class="fas fa-filter"></i>
+                                </div>
+                                <h3>Лабораторная работа 5</h3>
+                                <p>Фильтрация изображений: наложение шумов (гауссов, соль-перец) и применение фильтров (низкочастотные, высокочастотные, медианные).</p>
+                                <div class="color-preview" style="background: linear-gradient(45deg, #ffa36c, #ffe66d, #ffa36c);"></div>
+                                <a href="/lab5" class="btn btn-lab btn-lab-5">
+                                    Перейти к работе 5
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Дополнительная информация -->
-        <div class="features-section">
-            <div class="container">
-                <div class="row">
-                    <div class="col-md-3 feature-item">
-                        <div class="feature-icon">
-                            <i class="fas fa-exchange-alt"></i>
-                        </div>
-                        <h5>Конвертация форматов</h5>
-                        <p>Преобразование между HEX, RGB, HSL и другими цветовыми моделями</p>
-                    </div>
-                    <div class="col-md-3 feature-item">
-                        <div class="feature-icon">
-                            <i class="fas fa-eye-dropper"></i>
-                        </div>
-                        <h5>Визуализация</h5>
-                        <p>Наглядное представление цветов и их преобразований</p>
-                    </div>
-                    <div class="col-md-3 feature-item">
-                        <div class="feature-icon">
-                            <i class="fas fa-cogs"></i>
-                        </div>
-                        <h5>Расширенный функционал</h5>
-                        <p>Дополнительные инструменты для работы с цветовыми пространствами</p>
-                    </div>
-                    <div class="col-md-3 feature-item">
-                        <div class="feature-icon">
-                            <i class="fas fa-compress-alt"></i>
-                        </div>
-                        <h5>Алгоритмы сжатия</h5>
-                        <p>Реализация алгоритмов RLE и LZW для текста и изображений</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+{{--        <div class="features-section">--}}
+{{--            <div class="container">--}}
+{{--                <div class="row">--}}
+{{--                    <div class="col-md-3 feature-item">--}}
+{{--                        <div class="feature-icon">--}}
+{{--                            <i class="fas fa-exchange-alt"></i>--}}
+{{--                        </div>--}}
+{{--                        <h5>Конвертация форматов</h5>--}}
+{{--                        <p>Преобразование между HEX, RGB, HSL и другими цветовыми моделями</p>--}}
+{{--                    </div>--}}
+{{--                    <div class="col-md-3 feature-item">--}}
+{{--                        <div class="feature-icon">--}}
+{{--                            <i class="fas fa-eye-dropper"></i>--}}
+{{--                        </div>--}}
+{{--                        <h5>Визуализация</h5>--}}
+{{--                        <p>Наглядное представление цветов и их преобразований</p>--}}
+{{--                    </div>--}}
+{{--                    <div class="col-md-3 feature-item">--}}
+{{--                        <div class="feature-icon">--}}
+{{--                            <i class="fas fa-cogs"></i>--}}
+{{--                        </div>--}}
+{{--                        <h5>Расширенный функционал</h5>--}}
+{{--                        <p>Дополнительные инструменты для работы с цветовыми пространствами</p>--}}
+{{--                    </div>--}}
+{{--                    <div class="col-md-3 feature-item">--}}
+{{--                        <div class="feature-icon">--}}
+{{--                            <i class="fas fa-compress-alt"></i>--}}
+{{--                        </div>--}}
+{{--                        <h5>Алгоритмы сжатия и фильтрации</h5>--}}
+{{--                        <p>Реализация алгоритмов RLE, LZW и фильтрации изображений</p>--}}
+{{--                    </div>--}}
+{{--                </div>--}}
+{{--            </div>--}}
+{{--        </div>--}}
     </div>
 </div>
 
 <!-- Футер -->
 <div class="footer">
     <div class="container">
-        <p>&copy; 2024 Лабораторные работы по обработке цвета и алгоритмам сжатия. Все права защищены.</p>
+        <p>&copy; 2025 Лабораторные работы по обработке цвета, алгоритмам сжатия и фильтрации изображений. Все права защищены.</p>
     </div>
 </div>
 
@@ -373,24 +410,25 @@
 <!-- Альтернатива Font Awesome через CDN -->
 <script>
     // Если Font Awesome не загрузился, добавляем базовые стили для иконок
-    document.addEventListener('DOMContentLoaded', function() {
-        const style = document.createElement('style');
-        style.textContent = `
-            .fas::before {
-                font-family: 'Segoe UI', sans-serif;
-                font-weight: 900;
-            }
-            .fa-palette::before { content: '🎨'; }
-            .fa-sliders-h::before { content: '⚙️'; }
-            .fa-code::before { content: '💻'; }
-            .fa-compress-arrows-alt::before { content: '📚'; }
-            .fa-exchange-alt::before { content: '🔄'; }
-            .fa-eye-dropper::before { content: '👁️'; }
-            .fa-cogs::before { content: '🔧'; }
-            .fa-compress-alt::before { content: '📦'; }
-        `;
-        document.head.appendChild(style);
-    });
+    // document.addEventListener('DOMContentLoaded', function() {
+    //     const style = document.createElement('style');
+    //     style.textContent = `
+    //         .fas::before {
+    //             font-family: 'Segoe UI', sans-serif;
+    //             font-weight: 900;
+    //         }
+    //         .fa-palette::before { content: '🎨'; }
+    //         .fa-sliders-h::before { content: '⚙️'; }
+    //         .fa-code::before { content: '💻'; }
+    //         .fa-compress-arrows-alt::before { content: '📚'; }
+    //         .fa-filter::before { content: '🔍'; }
+    //         .fa-exchange-alt::before { content: '🔄'; }
+    //         .fa-eye-dropper::before { content: '👁️'; }
+    //         .fa-cogs::before { content: '🔧'; }
+    //         .fa-compress-alt::before { content: '📦'; }
+    //     `;
+    //     document.head.appendChild(style);
+    // });
 </script>
 </body>
 </html>

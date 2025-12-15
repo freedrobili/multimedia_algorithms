@@ -7,30 +7,81 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Drivers\Gd\Driver;
-use Intervention\Image\ImageManager; // ← ДОБАВЬТЕ ЭТОТ ИМПОРТ
+use Intervention\Image\ImageManager;
 
+/**
+ *
+ * Биты до сжатия:
+ * Исходная строка: abacabadabacabae = 16 символов
+ *
+ * Каждый символ в ASCII занимает 8 бит (1 байт)
+ *
+ * Итого: 16 × 8 = 128 бит
+ *
+ * 9 бит позволяют хранить числа от 0 до 511 (2⁹-1 = 511)
+ *
+ * 260 ≤ 511, значит достаточно 9 бит
+ *
+ * Количество кодов в последовательности = 11 (97, 98, 97, 99, 256, 97, 100, 260, 259, 257, 101)
+ *
+ * Каждый код занимает 9 бит
+ *
+ * Итого: 11 × 9 = 99 бит
+ *
+ * Проверка:
+ * Биты до: 128 бит (16 символов × 8 бит)
+ *
+ * Биты после: 99 бит (11 кодов × 9 бит)
+ *
+ * Степень сжатия: (128 - 99) / 128 × 100% ≈ 22.66%
+ *
+ * Почему именно 9 бит? Важный нюанс!
+ * В реальной реализации LZW размер кода динамически увеличивается по мере роста словаря:
+ *
+ * Сначала используют 9 бит (коды 0-511)
+ *
+ * Когда словарь заполняет все 512 записей (0-511), переходят на 10 бит (0-1023)
+ *
+ * Потом на 11, 12 бит и т.д.
+ *
+ * В данном примере:
+ *
+ * Максимальный код 260
+ *
+ * 260 < 512, значит достаточно 9 бит на весь процесс
+ *
+ * Поэтому считаем фиксированно по 9 бит на код
+ * LzwController
+ *
+ *  - изображений (градации серого) — извлечение яркостей пикселей в массив 0..255
+ *
+ * @package App\Http\Controllers
+ */
 class LzwController extends Controller
 {
-    // Для отображения шагов/словаря наружу мы будем сохранять последние словари
     private array $lastSymbolToCode = [];
     private array $lastCodeToSymbol = [];
     private array $encodingSteps = [];
     private array $decodingSteps = [];
-    private ImageManager $imageManager; // ← ДОБАВЬТЕ ЭТО СВОЙСТВО
+
+    private ImageManager $imageManager;
 
     public function __construct()
     {
-        // Инициализируем ImageManager
         $this->imageManager = new ImageManager(new Driver());
     }
 
+    /**
+     * @return \Illuminate\View\View
+     */
     public function index()
     {
         return view('lab_4');
     }
 
     /**
-     * Кодирование текста алгоритмом LZW
+     * @param Request $request
+     * @return JsonResponse
      */
     public function encodeText(Request $request): JsonResponse
     {
@@ -41,18 +92,15 @@ class LzwController extends Controller
             return response()->json(['error' => 'Введите текст для кодирования']);
         }
 
-        // Сброс шагов
         $this->encodingSteps = [];
 
-        // Кодируем (в реализации мы работаем на уровне байтов)
         $encoded = $this->lzwEncode($input, $showSteps);
 
-        // Статистика
-        $originalBits = strlen($input) * 8; // strlen в байтах
+        $originalBits = strlen($input) * 8;
         $encodedBits = $this->calculateEncodedBits($encoded);
+        // Процент сжатия: (исход - закодировано) / исход * 100
         $compressionRatio = $originalBits > 0 ? (($originalBits - $encodedBits) / $originalBits) * 100 : 0.0;
 
-        // Подготовка человекочитаемого словаря для вывода: code => symbol (как ord и видимый)
         $dictionaryForOutput = $this->formatDictionaryForOutput();
 
         return response()->json([
@@ -68,7 +116,8 @@ class LzwController extends Controller
     }
 
     /**
-     * Декодирование текста алгоритмом LZW (вход: строка кодов, разделённых пробелом)
+     * @param Request $request
+     * @return JsonResponse
      */
     public function decodeText(Request $request): JsonResponse
     {
@@ -79,14 +128,12 @@ class LzwController extends Controller
             return response()->json(['error' => 'Введите закодированную последовательность']);
         }
 
-        // Преобразуем строку в массив целых кодов
         $encoded = array_map('intval', preg_split('/\s+/', trim($encodedString)));
 
         $this->decodingSteps = [];
         $decodedBytes = $this->lzwDecode($encoded, $showSteps); // возвращает байтовую строку
 
-        // Для текста мы считаем, что исходный ввод был байтовой строкой.
-        // Если исходно вводили UTF-8 символы — декодированная байтовая последовательность может требовать интерпретации.
+        // Для удобства интерфейса возвращаем decoded как байтовую строку (возможно UTF-8)
         $decoded = $decodedBytes;
 
         return response()->json([
@@ -97,12 +144,25 @@ class LzwController extends Controller
         ]);
     }
 
+
     /**
-     * Кодирование изображения алгоритмом LZW
-     * Возвращает JSON-файл со структуриой: width,height, encoded (массив кодов), original_bits, encoded_bits, compression_ratio
-     */
-    /**
-     * Кодирование изображения алгоритмом LZW
+     * encodeImage
+     *
+     * Кодирует загруженное изображение (multipart file input 'image') алгоритмом LZW:
+     *  - Преобразует изображение в градации серого (greyscale)
+     *  - Собирает массив яркостей пикселей 0..255 (по строкам)
+     *  - Вызывает lzwEncode для этого массива (внутри lzwEncode элементы-массивы приводятся к байтовым символам)
+     *  - Считает статистику и сохраняет JSON с результатом кодирования в storage
+     *
+     * Примечания и важные детали реализации:
+     *  - Для получения значений R,G,B используется Intervention Image и метод pickColor.
+     *    В оригинальном коде pickColor может возвращать объект Color, поэтому здесь извлекаются
+     *    значения через ->red()->value() и т.д. (зависит от версии библиотеки).
+     *  - В результате записывается JSON файл: имя файла = <original>_lzw_encoded.json в storage (root)
+     *    (в production вы, возможно, захотите хранить в папке, следить за коллизией имён и т.д.)
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function encodeImage(Request $request): JsonResponse
     {
@@ -121,25 +181,26 @@ class LzwController extends Controller
             $width = $img->width();
             $height = $img->height();
 
-            // Собираем байтовый массив яркостей (0..255)
             $pixels = [];
             for ($y = 0; $y < $height; $y++) {
                 for ($x = 0; $x < $width; $x++) {
-                    // ИСПРАВЛЕННАЯ СТРОКА - получаем числовые значения из объектов Color
                     $color = $img->pickColor($x, $y);
-                    $r = $color->red()->value(); // получаем числовое значение красного канала
-                    $g = $color->green()->value(); // получаем числовое значение зеленого канала
-                    $b = $color->blue()->value(); // получаем числовое значение синего канала
+                    $r = $color->red()->value();
+                    $g = $color->green()->value();
+                    $b = $color->blue()->value();
 
+                    // Преобразование RGB в яркость (luma) по стандартной формуле:
+                    // Y = 0.299 R + 0.587 G + 0.114 B
                     $brightness = (int) round($r * 0.299 + $g * 0.587 + $b * 0.114);
-                    // Clamp 0..255
+
+                    // Ограничиваем 0..255
                     if ($brightness < 0) $brightness = 0;
                     if ($brightness > 255) $brightness = 255;
+
                     $pixels[] = $brightness;
                 }
             }
 
-            // Остальной код без изменений...
             $this->encodingSteps = [];
             $encoded = $this->lzwEncode($pixels, false);
 
@@ -180,7 +241,8 @@ class LzwController extends Controller
     }
 
     /**
-     * Декодирование изображения из ранее сохранённого JSON файла (в storage)
+     * @param Request $request
+     * @return JsonResponse
      */
     public function decodeImage(Request $request): JsonResponse
     {
@@ -217,13 +279,14 @@ class LzwController extends Controller
             $encoded = array_map('intval', $data['encoded']);
 
             Log::info("Dimensions: {$width}x{$height}, encoded data: " . count($encoded) . " items");
-            Log::info('Encoded range: ' . min($encoded) . '-' . max($encoded));
+            if (!empty($encoded)) {
+                Log::info('Encoded range: ' . min($encoded) . '-' . max($encoded));
+            }
 
             if (empty($encoded)) {
                 return response()->json(['error' => 'Закодированные данные пусты']);
             }
 
-            // LZW декодирование
             Log::info('Starting LZW decode...');
             try {
                 $decodedBytes = $this->lzwDecode($encoded, false, true);
@@ -233,7 +296,7 @@ class LzwController extends Controller
                     return response()->json(['error' => 'Декодированные данные пусты']);
                 }
 
-                // Преобразуем строку в массив байтов
+                // Преобразуем байтовую строку в массив чисел 0..255
                 $bytes = [];
                 $len = strlen($decodedBytes);
                 for ($i = 0; $i < $len; $i++) {
@@ -249,11 +312,11 @@ class LzwController extends Controller
                 ]);
             }
 
-            // Проверяем размер
             $expectedSize = $width * $height;
             $actualSize = count($bytes);
             Log::info("Size check: expected {$expectedSize}, actual {$actualSize}");
 
+            // Если расхождение — подрезаем или дополняем нулями
             if ($actualSize !== $expectedSize) {
                 Log::warning("Size mismatch, adjusting...");
                 if ($actualSize > $expectedSize) {
@@ -263,14 +326,12 @@ class LzwController extends Controller
                 }
             }
 
-            // СОЗДАЕМ ИЗОБРАЖЕНИЕ ПРАВИЛЬНЫМ СПОСОБОМ
             Log::info("Creating image using GD...");
 
             try {
-                // Создаем изображение вручную используя GD
                 $image = imagecreate($width, $height);
 
-                // Создаем палитру градаций серого
+                // Заполняем палитру градаций серого (0..255)
                 for ($i = 0; $i < 256; $i++) {
                     imagecolorallocate($image, $i, $i, $i);
                 }
@@ -279,6 +340,7 @@ class LzwController extends Controller
                 $idx = 0;
                 $lastProgress = 0;
 
+                // Устанавливаем пиксели построчно
                 for ($y = 0; $y < $height; $y++) {
                     $progress = (int)($y * 100 / $height);
                     if ($progress >= $lastProgress + 10) {
@@ -291,6 +353,7 @@ class LzwController extends Controller
                         if ($val < 0) $val = 0;
                         if ($val > 255) $val = 255;
 
+                        // В imagesetpixel третий параметр — индекс цвета из палитры, т.е. значение 0..255
                         imagesetpixel($image, $x, $y, $val);
                         $idx++;
                     }
@@ -298,22 +361,16 @@ class LzwController extends Controller
 
                 Log::info('Pixel setting completed');
 
-                // Сохранение изображения - ИСПРАВЛЕН ПУТЬ
                 $outFilename = pathinfo($filename, PATHINFO_FILENAME) . '_decoded.png';
-
-                // Сохраняем прямо в public storage (без подпапки private)
-                $outPath = $outFilename; // Просто имя файла, без 'public/'
-
-                Log::info("Saving image to public storage: " . $outPath);
-
-                // Сохраняем через временный файл
                 $tempPath = storage_path('app/public/' . $outFilename);
+
+                Log::info("Saving image to public storage: " . $tempPath);
+
                 imagepng($image, $tempPath);
                 imagedestroy($image);
 
                 Log::info('Image saved successfully to: ' . $tempPath);
 
-                // Проверяем, что файл создан
                 if (!file_exists($tempPath)) {
                     throw new \Exception('Failed to create image file');
                 }
@@ -331,10 +388,9 @@ class LzwController extends Controller
 
             Log::info('=== PROCESS COMPLETED SUCCESSFULLY ===');
 
-            // Возвращаем только имя файла, без пути 'public/'
             return response()->json([
                 'success' => true,
-                'restored_image' => $outFilename, // Только имя файла
+                'restored_image' => $outFilename,
                 'width' => $width,
                 'height' => $height,
                 'pixels_restored' => count($bytes),
@@ -352,16 +408,27 @@ class LzwController extends Controller
             ]);
         }
     }
-    /* ------------------------ Внутренние LZW методы ------------------------ */
 
     /**
-     * LZW encode: поддерживает вход как строку (будем работать на уровне байтов)
-     * или как массив целых 0..255 (пиксели).
-     * Возвращает массив кодов (int).
+     * lzwEncode
+     *
+     * Кодирование алгоритмом LZW.
+     *
+     * Общая логика:
+     *  - инициализируем словарь 0..255
+     *  - проходим через последовательность, объединяя текущую последовательность и следующий символ,
+     *    если объединённая последовательность уже есть в словаре — продолжаем, иначе:
+     *       - выводим код текущей последовательности
+     *       - добавляем комбинированную последовательность в словарь под новым кодом
+     *       - current = следующий символ
+     *  - в конце выводим код для текущего
+     *
+     * @param string|array $input
+     * @param bool $showSteps
+     * @return array<int>
      */
     private function lzwEncode($input, bool $showSteps = false): array
     {
-        // Нормализация входа в массив "байтовых символов" (строк длины 1)
         $symbols = [];
         if (is_array($input)) {
             foreach ($input as $v) {
@@ -369,12 +436,9 @@ class LzwController extends Controller
                 $symbols[] = chr($val);
             }
         } else {
-            // строка -> разбиваем по байтам
-            // str_split в PHP разделяет по байтам, что удобно для учебного варианта (работаем с байтами).
             $symbols = str_split($input);
         }
 
-        // Инициализация словарей: символ (один байт) -> код 0..255 и обратный
         $symbolToCode = [];
         $codeToSymbol = [];
         for ($i = 0; $i < 256; $i++) {
@@ -387,7 +451,6 @@ class LzwController extends Controller
         $encoded = [];
 
         if (count($symbols) === 0) {
-            // Сохраняем последние словари (для вывода)
             $this->lastSymbolToCode = $symbolToCode;
             $this->lastCodeToSymbol = $codeToSymbol;
             return $encoded;
@@ -409,10 +472,10 @@ class LzwController extends Controller
                     $this->encodingSteps[] = ['action' => 'extend', 'current' => $this->visibleString($current)];
                 }
             } else {
-                // вывести код текущей строки
+                // Выводим код текущей последовательности
                 $encoded[] = $symbolToCode[$current];
 
-                // добавить combined в словарь
+                // Добавляем combined в словарь с новым кодом
                 $symbolToCode[$combined] = $dictSize;
                 $codeToSymbol[$dictSize] = $combined;
                 $dictSize++;
@@ -426,17 +489,18 @@ class LzwController extends Controller
                     ];
                 }
 
+                // current = следующий символ (c)
                 $current = $c;
             }
         }
 
-        // последний код
+        // Вывод кода для последнего current
         $encoded[] = $symbolToCode[$current];
         if ($showSteps) {
             $this->encodingSteps[] = ['action' => 'final_output', 'output_code' => end($encoded)];
         }
 
-        // Сохраняем последние словари для вывода
+        // Сохраняем последние словари для вывода/диагностики
         $this->lastSymbolToCode = $symbolToCode;
         $this->lastCodeToSymbol = $codeToSymbol;
 
@@ -444,21 +508,31 @@ class LzwController extends Controller
     }
 
     /**
-     * LZW decode: принимает массив кодов (int) и возвращает байтовую строку.
-     */
-    /**
-     * LZW decode: принимает массив кодов (int) и возвращает байтовую строку.
-     */
-    /**
-     * LZW decode: принимает массив кодов (int) и возвращает байтовую строку.
-     */
-    /**
-     * LZW decode: принимает массив кодов (int) и возвращает байтовую строку.
-     * Добавлен третий параметр $robust (по умолчанию false) — если true, при ошибках
-     * будет подставляться fallback-байт и декодирование продолжится.
-     */
-    /**
-     * LZW decode: принимает массив кодов (int) и возвращает байтовую строку.
+     * lzwDecode
+     *
+     * Декодирование массива кодов LZW в байтовую строку.
+     *
+     * Параметры:
+     *  - $encoded (array<int>) — входная последовательность кодов
+     *  - $showSteps (bool) — если true — записывать шаги в $this->decodingSteps
+     *  - $robust (bool) — если true, попытаться продолжить декодирование при некоторых ошибках,
+     *       вставляя fallback-байты вместо выброса исключения (полезно для повреждённых данных)
+     *
+     * Поведение:
+     *  - инициализируем словарь 0..255
+     *  - читаем первый код, добавляем соответствующий символ в результат
+     *  - для каждого следующего кода:
+     *      - если код присутствует в словаре — берем соответствующую строку
+     *      - иначе если код == dictSize — используем prevString + prevString[0] (специальный случай LZW)
+     *      - иначе — ошибка (или fallback при $robust)
+     *      - добавляем в результат найденную строку
+     *      - добавляем новую запись в словарь: prevString + currentString[0]
+     *
+     * @param array $encoded
+     * @param bool $showSteps
+     * @param bool $robust
+     * @return string
+     * @throws \Exception
      */
     private function lzwDecode(array $encoded, bool $showSteps = false, bool $robust = false): string
     {
@@ -471,7 +545,7 @@ class LzwController extends Controller
         $errors = [];
 
         try {
-            // Инициализация словаря
+            // Инициализация словаря code => symbol
             $codeToSymbol = [];
             for ($i = 0; $i < 256; $i++) {
                 $codeToSymbol[$i] = chr($i);
@@ -481,10 +555,10 @@ class LzwController extends Controller
             // Первый код
             $firstCode = (int)$encoded[0];
 
-            // Проверка валидности первого кода
+            // Валидация первого кода: ожидаем 0..dictSize-1
             if ($firstCode < 0 || $firstCode >= $dictSize) {
                 if ($robust) {
-                    // Используем fallback
+                    // В режиме robustness используем младший байт
                     $firstCode = $firstCode & 0xFF;
                     if ($firstCode >= 256) $firstCode = 0;
                 } else {
@@ -492,6 +566,7 @@ class LzwController extends Controller
                 }
             }
 
+            // Начальный результат — символ для первого кода (или fallback)
             $result = $codeToSymbol[$firstCode] ?? chr($firstCode & 0xFF);
             $prevCode = $firstCode;
 
@@ -503,23 +578,23 @@ class LzwController extends Controller
                 ];
             }
 
-            // Основной цикл декодирования
+            // Основной цикл: для каждого следующего кода строим текущую строку
             for ($i = 1; $i < count($encoded); $i++) {
                 $currCode = (int)$encoded[$i];
 
                 try {
                     $currentString = '';
 
-                    // Обработка текущего кода
                     if (isset($codeToSymbol[$currCode])) {
+                        // Код есть в словаре — берём напрямую
                         $currentString = $codeToSymbol[$currCode];
                     } else if ($currCode == $dictSize) {
-                        // Специальный случай: код равен текущему размеру словаря
+                        // Специфический LZW случай
                         $prevString = $codeToSymbol[$prevCode];
                         $currentString = $prevString . $prevString[0];
                     } else {
+                        // Неизвестный код
                         if ($robust) {
-                            // Fallback: используем младший байт
                             $currentString = chr($currCode & 0xFF);
                             $errors[] = "Неизвестный код $currCode на позиции $i";
                         } else {
@@ -527,18 +602,32 @@ class LzwController extends Controller
                         }
                     }
 
-                    // Добавляем декодированную строку к результату
+                    // Добавляем найденную строку в результирующую последовательность
                     $result .= $currentString;
 
-                    // Добавляем новую запись в словарь
-                    if ($dictSize < 65536) { // Ограничим размер словаря
+                    // ============ ИСПРАВЛЕНИЕ ЗДЕСЬ ============
+                    if ($showSteps) {
+                        // ВАЖНО: сначала добавляем шаг с ДЕКОДИРОВАННОЙ строкой
+                        $this->decodingSteps[] = [
+                            'action' => 'decode',
+                            'step' => $i + 1, // номер шага (начиная с 2)
+                            'code' => $currCode,
+                            'decoded_symbol' => $this->visibleString($currentString),
+                            'current_output' => $this->visibleString($result) // весь накопленный вывод
+                        ];
+                    }
+                    // ===========================================
+
+                    // Добавляем новую запись в словарь: prevString + currentString[0]
+                    if ($dictSize < 65536) { //16-битные — словарь до 65536 записей
                         $prevString = $codeToSymbol[$prevCode];
                         $newEntry = $prevString . $currentString[0];
                         $codeToSymbol[$dictSize] = $newEntry;
 
                         if ($showSteps) {
+                            // А ЭТО уже второй шаг - добавление в словарь
                             $this->decodingSteps[] = [
-                                'action' => 'add',
+                                'action' => 'add_to_dict',
                                 'new_code' => $dictSize,
                                 'new_symbol' => $this->visibleString($newEntry)
                             ];
@@ -547,16 +636,17 @@ class LzwController extends Controller
                         $dictSize++;
                     }
 
+                    // Следующий шаг — предыдущий код становится текущим
                     $prevCode = $currCode;
 
                 } catch (\Exception $inner) {
                     if ($robust) {
+                        // В режиме robustness — логируем ошибку и вставляем нулевой байт
                         $errors[] = [
                             'index' => $i,
                             'code' => $currCode,
                             'message' => $inner->getMessage()
                         ];
-                        // Добавляем fallback байт
                         $result .= chr(0);
                         continue;
                     } else {
@@ -565,16 +655,16 @@ class LzwController extends Controller
                 }
             }
 
-            // Сохраняем словари для отладки
+            // Сохраняем словари для отладки и отображения
             $this->lastCodeToSymbol = $codeToSymbol;
             $this->lastSymbolToCode = array_flip($codeToSymbol);
 
-            // Логируем нефатальные ошибки
+            // Если были ошибки и showSteps=true — добавляем их в шаги
             if (!empty($errors) && $showSteps) {
                 foreach ($errors as $error) {
                     $this->decodingSteps[] = [
                         'action' => 'error',
-                        'message' => $error['message'] ?? $error
+                        'message' => is_array($error) ? ($error['message'] ?? json_encode($error)) : $error
                     ];
                 }
             }
@@ -582,11 +672,12 @@ class LzwController extends Controller
             return $result;
 
         } catch (\Exception $e) {
+            // Логируем для отладки
             Log::error('LZW decode error: ' . $e->getMessage());
             Log::error('Encoded data sample: ' . json_encode(array_slice($encoded, 0, 10)));
 
             if ($robust) {
-                // Попытка восстановления: преобразуем коды напрямую в байты
+                // В режиме robustness — попытаемся вернуть простой fallback: преобразуем каждый код в младший байт
                 $fallback = '';
                 foreach ($encoded as $code) {
                     $fallback .= chr($code & 0xFF);
@@ -594,18 +685,27 @@ class LzwController extends Controller
                 return $fallback;
             }
 
+            // Иначе пробрасываем исключение наружу
             throw new \Exception("Unable to decode input: " . $e->getMessage());
         }
     }
 
-
-
-    /* ------------------------ Утилиты ------------------------ */
+    /* ------------------------ Утилитарные методы ------------------------ */
 
     /**
-     * Рассчитать биты, занятые закодированными кодами.
-     * Упрощённый подход: все коды записываются одной шириной = ceil(log2(maxCode+1)), минимум 1 бит.
-     * (Можно улучшить до переменной длины кодов по мере роста словаря.)
+     * calculateEncodedBits
+     *
+     * Упрощённый подсчёт количества бит, требующихся для хранения массива кодов.
+     * Подход:
+     *  - Находим максимальный код в массиве
+     *  - Вычисляем минимальную ширину в битах: ceil(log2(maxCode+1)), минимум 1 бит
+     *  - Умножаем на количество кодов
+     *
+     * Это упрощённая модель; реальные реализации LZW хранят кодовое поле с переменной
+     * шириной (увеличивающейся по мере роста словаря) и могут использовать битовый буфер.
+     *
+     * @param array<int> $encoded
+     * @return int Количество бит
      */
     private function calculateEncodedBits(array $encoded): int
     {
@@ -613,23 +713,30 @@ class LzwController extends Controller
             return 0;
         }
         $maxCode = max($encoded);
+        // bitsPerCode = ceil(log2(maxCode + 1)), минимум 1
         $bitsPerCode = (int) max(1, ceil(log($maxCode + 1, 2)));
         return count($encoded) * $bitsPerCode;
     }
 
     /**
-     * Для удобного вывода словаря: вернём массив code => readable
+     * formatDictionaryForOutput
+     *
+     * Формирует читаемую версию словаря для вывода на фронтенд или для отладки.
+     * Предпочтение отдаём lastCodeToSymbol (code => symbol). Если оно пустое — используем обратный
+     * mapping lastSymbolToCode.
+     *
+     * Возвращает массив: code => readableString
+     *
+     * @return array<int,string>
      */
     private function formatDictionaryForOutput(): array
     {
         $out = [];
-        // предпочитаем lastCodeToSymbol (код => символ)
         if (!empty($this->lastCodeToSymbol)) {
             foreach ($this->lastCodeToSymbol as $code => $symbol) {
                 $out[$code] = $this->visibleString($symbol);
             }
         } else {
-            // fallback: symbol => code
             foreach ($this->lastSymbolToCode as $symbol => $code) {
                 $out[$code] = $this->visibleString($symbol);
             }
@@ -638,18 +745,25 @@ class LzwController extends Controller
     }
 
     /**
-     * Преобразует байтовую строку (или символы) в читаемую форму для отладки:
-     * - если символ печатаемый ASCII, показывает 'A' или т.е.
-     * - также добавляет ord(...) в скобках.
+     * visibleString
+     *
+     * Преобразует последовательность байтов (строку) в читабельное представление,
+     * подходящее для отладки. Пример вывода: "65:'A',66:'B',10:'.'"
+     *
+     * Логика:
+     *  - Для каждого байта вычисляем ord
+     *  - Если байт — печатаемый ASCII (32..126) — показываем символ, иначе точку '.'
+     *  - Возвращаем композицию "{ord}:'{char}'" через запятую
+     *
+     * @param string $s Строка байтов
+     * @return string Читаемая строка
      */
     private function visibleString(string $s): string
     {
-        // Показываем последовательность символов в виде "[65:'A'][66:'B']..." (но не слишком длинно)
         $parts = [];
         $bytes = str_split($s);
         foreach ($bytes as $b) {
             $ord = ord($b);
-            // Печатаемый ASCII (32..126) показываем как символ, иначе точка
             $char = ($ord >= 32 && $ord <= 126) ? $b : '.';
             $parts[] = "{$ord}:'{$char}'";
         }
