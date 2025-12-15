@@ -39,7 +39,14 @@ Route::prefix('lab4')->group(function () {
     Route::post('/encode-text', [LzwController::class, 'encodeText']);
     Route::post('/decode-text', [LzwController::class, 'decodeText']);
     Route::post('/encode-image', [LzwController::class, 'encodeImage']);
-    Route::post('/decode-image', [LzwController::class, 'decodeImage']); // ← ЭТОЙ СТРОКИ НЕ ХВАТАЕТ
+    Route::post('/decode-image', [LzwController::class, 'decodeImage']);
 });
 
-
+Route::prefix('lab5')->group(function () {
+    Route::get('/', [ImageFilterController::class, 'index'])->name('lab5.index');
+    Route::post('/upload', [ImageFilterController::class, 'uploadImage'])->name('lab5.upload');
+    Route::post('/apply-noise', [ImageFilterController::class, 'applyNoise'])->name('lab5.apply-noise');
+    Route::post('/apply-filter', [ImageFilterController::class, 'applyFilter'])->name('lab5.apply-filter');
+    Route::get('/images', [ImageFilterController::class, 'getProcessedImages'])->name('lab5.images');
+    Route::post('/clear', [ImageFilterController::class, 'clearAll'])->name('lab5.clear');
+});
