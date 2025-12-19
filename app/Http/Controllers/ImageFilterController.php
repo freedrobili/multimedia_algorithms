@@ -26,9 +26,6 @@ class ImageFilterController extends Controller
         return view('lab5.index');
     }
 
-    /**
-     * Загрузка изображения (удаляем старые файлы)
-     */
     public function uploadImage(Request $request): JsonResponse
     {
         try {
@@ -37,10 +34,8 @@ class ImageFilterController extends Controller
             ]);
 
             if ($request->hasFile('image')) {
-                // Удаляем все старые файлы перед загрузкой нового
                 Storage::disk('public')->deleteDirectory('lab5');
 
-                // Создаем директории заново
                 Storage::disk('public')->makeDirectory('lab5/original');
                 Storage::disk('public')->makeDirectory('lab5/preview');
                 Storage::disk('public')->makeDirectory('lab5/noised');
@@ -49,10 +44,8 @@ class ImageFilterController extends Controller
                 $image = $request->file('image');
                 $filename = 'current_image.' . $image->getClientOriginalExtension();
 
-                // Сохраняем оригинальное изображение
                 $path = $image->storeAs('lab5/original', $filename, 'public');
 
-                // Создаем уменьшенную версию для предпросмотра
                 $img = $this->imageManager->read($image->getRealPath());
                 $img->scaleDown(600, 450);
                 $previewPath = 'lab5/preview/' . $filename;
@@ -80,9 +73,6 @@ class ImageFilterController extends Controller
         }
     }
 
-    /**
-     * Наложение шума на изображение
-     */
     public function applyNoise(Request $request): JsonResponse
     {
         try {
@@ -97,7 +87,6 @@ class ImageFilterController extends Controller
             $intensity = (int)$request->input('intensity');
 
             Log::info('$intensity', (array) $intensity);
-            // Всегда используем текущее изображение
             $originalPath = Storage::disk('public')->path('lab5/original/current_image.*');
             $files = glob($originalPath);
 
@@ -112,7 +101,6 @@ class ImageFilterController extends Controller
 
             $img = $this->imageManager->read($originalPath);
 
-            // Уменьшаем изображение для обработки
             $img->scaleDown(600, 450);
 
             switch ($noiseType) {
@@ -125,15 +113,14 @@ class ImageFilterController extends Controller
                 case 'voronoi':
                     $this->applyVoronoiNoise($img, $intensity);
                     break;
-//                case 'perlin':
-//                    $this->applyPerlinNoise($img, $intensity);
-//                    break;
+                case 'perlin':
+                    $this->applyPerlinNoise($img, $intensity);
+                    break;
 //                case 'curl':
 //                    $this->applyCurlNoise($img, $intensity);
 //                    break;
             }
 
-            // Сохраняем изображение с шумом
             $noisedFilename = 'current_noised.jpg';
             $noisedPath = 'lab5/noised/' . $noisedFilename;
             Storage::disk('public')->put($noisedPath, $img->encode(new JpegEncoder(90)));
@@ -173,7 +160,6 @@ class ImageFilterController extends Controller
             $maskSize = min((int)$request->input('mask_size'), 5);
             $brightnessFactor = $request->input('brightness_factor', 1);
 
-            // Ищем текущее изображение с шумом или оригинальное
             $noisedPath = Storage::disk('public')->path('lab5/noised/current_noised.jpg');
 
             if (!file_exists($noisedPath)) {
@@ -196,7 +182,6 @@ class ImageFilterController extends Controller
             // Уменьшаем изображение перед фильтрацией
             $img->scaleDown(600, 450);
 
-            // Применяем выбранный фильтр
             switch ($filterType) {
                 case 'lowpass':
                     $this->applyLowPassFilterOptimized($img, $maskType, $maskSize);
@@ -209,7 +194,6 @@ class ImageFilterController extends Controller
                     break;
             }
 
-            // Сохраняем результат
             $filteredFilename = 'current_filtered.jpg';
             $filteredPath = 'lab5/filtered/' . $filteredFilename;
             Storage::disk('public')->put($filteredPath, $img->encode(new JpegEncoder(90)));
@@ -230,7 +214,7 @@ class ImageFilterController extends Controller
     }
 
     /**
-     * 1. Гауссов шум (оптимизированный)
+     * 1. Гауссов шум
      */
     private function applyGaussianNoise($image, $sigma): void
     {
@@ -241,7 +225,6 @@ class ImageFilterController extends Controller
             for ($x = 0; $x < $width; $x++) {
                 $color = $image->pickColor($x, $y);
 
-                // Генерируем НЕЗАВИСИМЫЙ гауссов шум для каждого канала
                 $noiseR = $this->gaussianRandom(0, $sigma);
                 $noiseG = $this->gaussianRandom(0, $sigma);
                 $noiseB = $this->gaussianRandom(0, $sigma);
@@ -255,7 +238,6 @@ class ImageFilterController extends Controller
         }
     }
 
-    // Функция для генерации гауссовых случайных чисел
     private function gaussianRandom($mean, $std): float
     {
         // Бокс-Мюллер преобразование
@@ -269,7 +251,7 @@ class ImageFilterController extends Controller
     }
 
     /**
-     * Белый шум (оптимизированный)
+     * Белый шум
      */
     private function applyWhiteNoise($image, $intensity): void
     {
@@ -287,47 +269,186 @@ class ImageFilterController extends Controller
     }
 
     /**
-     * Шум Перлина (оптимизированный)
+     * Шум Перлина
      */
     private function applyPerlinNoise($image, $intensity): void
     {
         $width = $image->width();
         $height = $image->height();
-        $scale = 0.2;
 
-        for ($y = 0; $y < $height; $y += 2) {
-            for ($x = 0; $x < $width; $x += 2) {
+        $scale = 0.05;  // Масштаб паттерна
+        $octaves = 4;   // Количество октав
+        $persistence = 0.5; // Затухание амплитуды
+
+        // Предвычисляем карту шума для оптимизации
+        $noiseMap = [];
+
+        for ($y = 0; $y < $height; $y++) {
+            $noiseMap[$y] = [];
+            for ($x = 0; $x < $width; $x++) {
+                // Вычисляем значение шума Перлина
+                $noiseValue = $this->improvedPerlin(
+                    $x * $scale,
+                    $y * $scale,
+                    $octaves,
+                    $persistence
+                );
+
+                // Преобразуем из диапазона [0,1] в значение шума с интенсивностью
+                // Шум может быть как положительным, так и отрицательным
+                $noiseValue = ($noiseValue - 0.5) * 2; // [-1, 1]
+
+                $noiseMap[$y][$x] = (int)(
+                    $noiseValue * 127.5 * ($intensity / 100)
+                );
+            }
+        }
+
+        // Применяем шум к изображению
+        for ($y = 0; $y < $height; $y++) {
+            for ($x = 0; $x < $width; $x++) {
                 $color = $image->pickColor($x, $y);
+                $noise = $noiseMap[$y][$x];
 
-                $noise = $this->perlin($x * $scale, $y * $scale, 0.5);
-                $noise = (int)(($noise + 1) * 127.5 * ($intensity / 100));
-
+                // Добавляем шум к каждому каналу
                 $r = max(0, min(255, (int)$color->red()->value() + $noise));
                 $g = max(0, min(255, (int)$color->green()->value() + $noise));
                 $b = max(0, min(255, (int)$color->blue()->value() + $noise));
 
                 $image->drawPixel($x, $y, new Color($r, $g, $b));
-
-                if ($x + 1 < $width) {
-                    $image->drawPixel($x + 1, $y, new Color($r, $g, $b));
-                }
-                if ($y + 1 < $height) {
-                    $image->drawPixel($x, $y + 1, new Color($r, $g, $b));
-                }
             }
         }
     }
 
     /**
-     * 2. Шум Вороного (оптимизированный)
+     * Таблица перестановок для шума Перлина (256 случайных значений)
+     */
+    private array $perm = [];
+
+    /**
+     * Инициализация таблицы перестановок
+     */
+    private function initPermutationTable(): void
+    {
+        if (!empty($this->perm)) {
+            return;
+        }
+
+        // Создаём массив 0..255
+        $p = range(0, 255);
+
+        // Перемешиваем
+        shuffle($p);
+
+        // Дублируем для удобства доступа (512 элементов)
+        $this->perm = array_merge($p, $p);
+    }
+
+    /**
+     * Линейная интерполяция
+     */
+    private function lerp(float $a, float $b, float $t): float
+    {
+        return $a + $t * ($b - $a);
+    }
+
+    /**
+     * Функция затухания (fade) 6t^5 - 15t^4 + 10t^3
+     */
+    private function fade(float $t): float
+    {
+        return $t * $t * $t * ($t * ($t * 6 - 15) + 10);
+    }
+
+    /**
+     * Вычисление градиента
+     */
+    private function grad(int $hash, float $x, float $y): float
+    {
+        // Берём последние 4 бита хэша
+        $h = $hash & 15;
+
+        // Преобразуем в градиент
+        $u = $h < 8 ? $x : $y;
+        $v = $h < 4 ? $y : ($h == 12 || $h == 14 ? $x : 0);
+
+        return (($h & 1) == 0 ? $u : -$u) + (($h & 2) == 0 ? $v : -$v);
+    }
+
+    /**
+     * Улучшенный 2D шум Перлина
+     */
+    private function perlin2D(float $x, float $y): float
+    {
+        // Инициализируем таблицу перестановок при первом вызове
+        if (empty($this->perm)) {
+            $this->initPermutationTable();
+        }
+
+        // Находим целые координаты
+        $xi = (int)floor($x) & 255;
+        $yi = (int)floor($y) & 255;
+
+        // Дробные части
+        $xf = $x - floor($x);
+        $yf = $y - floor($y);
+
+        // Фейдинг-функция
+        $u = $this->fade($xf);
+        $v = $this->fade($yf);
+
+        // Хэши для 4 углов
+        $aa = $this->perm[$this->perm[$xi] + $yi];
+        $ab = $this->perm[$this->perm[$xi] + $yi + 1];
+        $ba = $this->perm[$this->perm[$xi + 1] + $yi];
+        $bb = $this->perm[$this->perm[$xi + 1] + $yi + 1];
+
+        // Интерполяция
+        $x1 = $this->lerp(
+            $this->grad($aa, $xf, $yf),
+            $this->grad($ba, $xf - 1, $yf),
+            $u
+        );
+
+        $x2 = $this->lerp(
+            $this->grad($ab, $xf, $yf - 1),
+            $this->grad($bb, $xf - 1, $yf - 1),
+            $u
+        );
+
+        // Возвращаем нормализованное значение
+        return ($this->lerp($x1, $x2, $v) + 1) / 2;
+    }
+
+    /**
+     * Фрактальный шум Перлина (несколько октав)
+     */
+    private function improvedPerlin(float $x, float $y, int $octaves = 4, float $persistence = 0.5): float
+    {
+        $total = 0.0;
+        $frequency = 1.0;
+        $amplitude = 1.0;
+        $maxValue = 0.0;
+
+        for ($i = 0; $i < $octaves; $i++) {
+            $total += $this->perlin2D($x * $frequency, $y * $frequency) * $amplitude;
+            $maxValue += $amplitude;
+            $amplitude *= $persistence;
+            $frequency *= 2.0;
+        }
+
+        return $total / $maxValue;
+    }
+
+    /**
+     * 2. Шум Вороного
      */
     private function applyVoronoiNoise($image, $intensity): void
     {
         $width = $image->width();
         $height = $image->height();
 
-        // Ячейки Вороного: чем больше интенсивность, тем мельче ячейки
-        $cellSize = max(5, 100 - $intensity); // От 100px до 5px
+        $cellSize = max(5, 100 - $intensity);
         $numPointsX = ceil($width / $cellSize);
         $numPointsY = ceil($height / $cellSize);
         $numPoints = $numPointsX * $numPointsY;
@@ -338,7 +459,7 @@ class ImageFilterController extends Controller
             $cellX = ($i % $numPointsX);
             $cellY = floor($i / $numPointsX);
 
-            // Случайное смещение внутри ячейки
+            // Случайное смещение внутри ячейки джиттер
             $points[] = [
                 'x' => $cellX * $cellSize + rand(0, $cellSize - 1),
                 'y' => $cellY * $cellSize + rand(0, $cellSize - 1)
@@ -371,10 +492,8 @@ class ImageFilterController extends Controller
                     }
                 }
 
-                // Шум пропорционален корню из расстояния
                 $noiseValue = (int)(sqrt($minDist) * ($intensity / 20));
 
-                // Ограничиваем разумными пределами
                 $noiseValue = min(100, $noiseValue);
 
                 $color = $image->pickColor($x, $y);
@@ -389,7 +508,7 @@ class ImageFilterController extends Controller
     }
 
     /**
-     * Вихревой шум (оптимизированный)
+     * Вихревой шум
      */
     private function applyCurlNoise($image, $intensity): void
     {
@@ -474,7 +593,7 @@ class ImageFilterController extends Controller
     }
 
     /**
-     * Низкочастотная фильтрация (сильно оптимизированная)
+     * Низкочастотная фильтрация
      */
     private function applyLowPassFilterOptimized($image, string $maskType, int $maskSize): void
     {
@@ -531,7 +650,6 @@ class ImageFilterController extends Controller
             }
         }
 
-        // ❗ Читаем из копии
         $source = clone $image;
 
         for ($y = $offset; $y < $height - $offset; $y++) {
@@ -564,7 +682,7 @@ class ImageFilterController extends Controller
 
 
     /**
-     * Высокочастотная фильтрация (сильно оптимизированная)
+     * Высокочастотная фильтрация
      */
     private function applyHighPassFilterOptimized($image, $maskType, $maskSize, $brightnessFactor): void
     {
@@ -616,7 +734,7 @@ class ImageFilterController extends Controller
     }
 
     /**
-     * Медианная фильтрация (сильно оптимизированная)
+     * Медианная фильтрация
      */
     private function applyMedianFilterOptimized($image, $maskSize): void
     {

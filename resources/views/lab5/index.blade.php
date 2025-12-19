@@ -159,7 +159,7 @@
     <div class="container">
         <h1 class="text-center mb-3"><i class="fas fa-filter me-2"></i>Лабораторная работа №5</h1>
         <h3 class="text-center">«Фильтрация изображений»</h3>
-        <p class="text-center mt-3">Изучение и программная реализация алгоритмов фильтрации и улучшения контраста изображений</p>
+{{--        <p class="text-center mt-3">Изучение и программная реализация алгоритмов фильтрации и улучшения контраста изображений</p>--}}
     </div>
 </div>
 
@@ -293,7 +293,7 @@
                     </div>
 
                     <div class="mt-4">
-                        <h6>Описание типов шума:</h6>
+{{--                        <h6>Описание типов шума:</h6>--}}
                         <div class="row">
                             <div class="col-12">
                                 <ul class="list-group">
@@ -303,15 +303,15 @@
                                     <li class="list-group-item">
                                         <strong>Белый шум:</strong> Случайные точки по всему изображению
                                     </li>
-                                    <li class="list-group-item">
-                                        <strong>Шум Перлина:</strong> Плавный, естественный шум
-                                    </li>
+{{--                                    <li class="list-group-item">--}}
+{{--                                        <strong>Шум Перлина:</strong> Плавный, естественный шум--}}
+{{--                                    </li>--}}
                                     <li class="list-group-item">
                                         <strong>Шум Вороного:</strong> Ячеистый шум, основанный на диаграмме Вороного
                                     </li>
-                                    <li class="list-group-item">
-                                        <strong>Вихревой шум:</strong> Вихреобразные искажения
-                                    </li>
+{{--                                    <li class="list-group-item">--}}
+{{--                                        <strong>Вихревой шум:</strong> Вихреобразные искажения--}}
+{{--                                    </li>--}}
                                 </ul>
                             </div>
                         </div>
