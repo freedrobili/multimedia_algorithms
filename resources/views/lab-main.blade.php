@@ -81,6 +81,10 @@
             border-top: 5px solid #ffa36c;
         }
 
+        .lab-card-6 {
+            border-top: 5px solid #9d4edd;
+        }
+
         .card-body {
             padding: 40px 30px;
             text-align: center;
@@ -109,6 +113,10 @@
 
         .lab-card-5 .lab-icon {
             color: #ffa36c;
+        }
+
+        .lab-card-6 .lab-icon {
+            color: #9d4edd;
         }
 
         .lab-card h3 {
@@ -193,6 +201,18 @@
             box-shadow: 0 5px 15px rgba(255, 163, 108, 0.4);
         }
 
+        .btn-lab-6 {
+            background: linear-gradient(45deg, #9d4edd, #ff6d00);
+            color: white;
+        }
+
+        .btn-lab-6:hover {
+            background: linear-gradient(45deg, #8a3ec9, #e65c00);
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(157, 78, 221, 0.4);
+        }
+
         .features-section {
             background: #f8f9fa;
             padding: 40px 0;
@@ -252,6 +272,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
 <div class="container">
@@ -352,45 +373,62 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- ЛР6 -->
+                    <div class="col-lg-3 col-md-6 mb-4">
+                        <div class="lab-card lab-card-6">
+                            <div class="card-body">
+                                <div class="lab-icon">
+                                    <i class="fas fa-wave-square"></i>
+                                </div>
+                                <h3>Лабораторная работа 6</h3>
+                                <p>Дискретное косинусное преобразование (DCT): прямое и обратное преобразования, анализ коэффициентов, применение для сжатия JPEG.</p>
+                                <div class="color-preview" style="background: linear-gradient(45deg, #9d4edd, #ff6d00, #9d4edd);"></div>
+                                <a href="/lab6" class="btn btn-lab btn-lab-6">
+                                    Перейти к работе 6
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Дополнительная информация -->
-{{--        <div class="features-section">--}}
-{{--            <div class="container">--}}
-{{--                <div class="row">--}}
-{{--                    <div class="col-md-3 feature-item">--}}
-{{--                        <div class="feature-icon">--}}
-{{--                            <i class="fas fa-exchange-alt"></i>--}}
-{{--                        </div>--}}
-{{--                        <h5>Конвертация форматов</h5>--}}
-{{--                        <p>Преобразование между HEX, RGB, HSL и другими цветовыми моделями</p>--}}
-{{--                    </div>--}}
-{{--                    <div class="col-md-3 feature-item">--}}
-{{--                        <div class="feature-icon">--}}
-{{--                            <i class="fas fa-eye-dropper"></i>--}}
-{{--                        </div>--}}
-{{--                        <h5>Визуализация</h5>--}}
-{{--                        <p>Наглядное представление цветов и их преобразований</p>--}}
-{{--                    </div>--}}
-{{--                    <div class="col-md-3 feature-item">--}}
-{{--                        <div class="feature-icon">--}}
-{{--                            <i class="fas fa-cogs"></i>--}}
-{{--                        </div>--}}
-{{--                        <h5>Расширенный функционал</h5>--}}
-{{--                        <p>Дополнительные инструменты для работы с цветовыми пространствами</p>--}}
-{{--                    </div>--}}
-{{--                    <div class="col-md-3 feature-item">--}}
-{{--                        <div class="feature-icon">--}}
-{{--                            <i class="fas fa-compress-alt"></i>--}}
-{{--                        </div>--}}
-{{--                        <h5>Алгоритмы сжатия и фильтрации</h5>--}}
-{{--                        <p>Реализация алгоритмов RLE, LZW и фильтрации изображений</p>--}}
-{{--                    </div>--}}
-{{--                </div>--}}
-{{--            </div>--}}
-{{--        </div>--}}
+        {{--        <div class="features-section">--}}
+        {{--            <div class="container">--}}
+        {{--                <div class="row">--}}
+        {{--                    <div class="col-md-3 feature-item">--}}
+        {{--                        <div class="feature-icon">--}}
+        {{--                            <i class="fas fa-exchange-alt"></i>--}}
+        {{--                        </div>--}}
+        {{--                        <h5>Конвертация форматов</h5>--}}
+        {{--                        <p>Преобразование между HEX, RGB, HSL и другими цветовыми моделями</p>--}}
+        {{--                    </div>--}}
+        {{--                    <div class="col-md-3 feature-item">--}}
+        {{--                        <div class="feature-icon">--}}
+        {{--                            <i class="fas fa-eye-dropper"></i>--}}
+        {{--                        </div>--}}
+        {{--                        <h5>Визуализация</h5>--}}
+        {{--                        <p>Наглядное представление цветов и их преобразований</p>--}}
+        {{--                    </div>--}}
+        {{--                    <div class="col-md-3 feature-item">--}}
+        {{--                        <div class="feature-icon">--}}
+        {{--                            <i class="fas fa-cogs"></i>--}}
+        {{--                        </div>--}}
+        {{--                        <h5>Расширенный функционал</h5>--}}
+        {{--                        <p>Дополнительные инструменты для работы с цветовыми пространствами</p>--}}
+        {{--                    </div>--}}
+        {{--                    <div class="col-md-3 feature-item">--}}
+        {{--                        <div class="feature-icon">--}}
+        {{--                            <i class="fas fa-compress-alt"></i>--}}
+        {{--                        </div>--}}
+        {{--                        <h5>Алгоритмы сжатия и фильтрации</h5>--}}
+        {{--                        <p>Реализация алгоритмов RLE, LZW и фильтрации изображений</p>--}}
+        {{--                    </div>--}}
+        {{--                </div>--}}
+        {{--            </div>--}}
+        {{--        </div>--}}
     </div>
 </div>
 
@@ -401,34 +439,26 @@
     </div>
 </div>
 
-<!-- Font Awesome для иконок -->
-<script src="https://kit.fontawesome.com/your-font-awesome-kit.js" crossorigin="anonymous"></script>
-
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
-<!-- Альтернатива Font Awesome через CDN -->
 <script>
     // Если Font Awesome не загрузился, добавляем базовые стили для иконок
-    // document.addEventListener('DOMContentLoaded', function() {
-    //     const style = document.createElement('style');
-    //     style.textContent = `
-    //         .fas::before {
-    //             font-family: 'Segoe UI', sans-serif;
-    //             font-weight: 900;
-    //         }
-    //         .fa-palette::before { content: '🎨'; }
-    //         .fa-sliders-h::before { content: '⚙️'; }
-    //         .fa-code::before { content: '💻'; }
-    //         .fa-compress-arrows-alt::before { content: '📚'; }
-    //         .fa-filter::before { content: '🔍'; }
-    //         .fa-exchange-alt::before { content: '🔄'; }
-    //         .fa-eye-dropper::before { content: '👁️'; }
-    //         .fa-cogs::before { content: '🔧'; }
-    //         .fa-compress-alt::before { content: '📦'; }
-    //     `;
-    //     document.head.appendChild(style);
-    // });
+    document.addEventListener('DOMContentLoaded', function() {
+        // Проверяем, загрузился ли Font Awesome
+        setTimeout(function() {
+            const icons = document.querySelectorAll('.lab-icon i');
+            icons.forEach(icon => {
+                if (getComputedStyle(icon, ':before').content === 'none') {
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        .fa-wave-square::before { content: '📊'; font-family: inherit; }
+                    `;
+                    document.head.appendChild(style);
+                }
+            });
+        }, 1000);
+    });
 </script>
 </body>
 </html>

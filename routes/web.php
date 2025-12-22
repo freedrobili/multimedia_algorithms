@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ColorController;
+use App\Http\Controllers\DctController;
 use App\Http\Controllers\ImageFilterController;
 use App\Http\Controllers\ImageProcessingController;
 use App\Http\Controllers\LabController;
@@ -42,6 +43,7 @@ Route::prefix('lab4')->group(function () {
     Route::post('/decode-image', [LzwController::class, 'decodeImage']);
 });
 
+// ЛР 5
 Route::prefix('lab5')->group(function () {
     Route::get('/', [ImageFilterController::class, 'index'])->name('lab5.index');
     Route::post('/upload', [ImageFilterController::class, 'uploadImage'])->name('lab5.upload');
@@ -49,4 +51,16 @@ Route::prefix('lab5')->group(function () {
     Route::post('/apply-filter', [ImageFilterController::class, 'applyFilter'])->name('lab5.apply-filter');
     Route::get('/images', [ImageFilterController::class, 'getProcessedImages'])->name('lab5.images');
     Route::post('/clear', [ImageFilterController::class, 'clearAll'])->name('lab5.clear');
+});
+
+// ЛР 6 - DCT
+Route::prefix('lab6')->group(function () {
+    Route::get('/', [DctController::class, 'index'])->name('lab6.index');
+    Route::post('/generate-signal', [DctController::class, 'generateSignal'])->name('lab6.generate-signal');
+    Route::post('/dct-1d', [DctController::class, 'dct1D'])->name('lab6.dct1d');
+    Route::post('/idct-1d', [DctController::class, 'idct1D'])->name('lab6.idct1d');
+    Route::post('/dct-zero-high-freq', [DctController::class, 'zeroHighFreq'])->name('lab6.zero-high-freq');
+    Route::post('/upload-image', [DctController::class, 'uploadImage'])->name('lab6.upload-image');
+    Route::post('/dct-2d', [DctController::class, 'dct2D'])->name('lab6.dct2d');
+    Route::post('/dct-8x8-jpeg', [DctController::class, 'dct8x8JPEG'])->name('lab6.dct-8x8-jpeg');
 });
