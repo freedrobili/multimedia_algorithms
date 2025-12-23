@@ -185,6 +185,71 @@
             color: #57568c;
             font-weight: 600;
         }
+        /* Добавьте в стили */
+        .spectrum-legend {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .color-scale {
+            display: flex;
+            height: 20px;
+            width: 200px;
+            margin-right: 15px;
+            background: linear-gradient(90deg,
+            #000080 0%,    /* Темно-синий */
+            #0000ff 20%,   /* Синий */
+            #0080ff 40%,   /* Голубой */
+            #00ffff 60%,   /* Бирюзовый */
+            #00ff80 70%,   /* Зеленый-бирюзовый */
+            #00ff00 75%,   /* Зеленый */
+            #80ff00 80%,   /* Желто-зеленый */
+            #ffff00 85%,   /* Желтый */
+            #ff8000 90%,   /* Оранжевый */
+            #ff0000 95%,   /* Красный */
+            #800000 100%   /* Темно-красный */
+            );
+        }
+
+        .image-preview {
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .image-preview:hover {
+            transform: scale(1.02);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .energy-badge {
+            font-size: 1rem;
+            padding: 0.35em 0.65em;
+            margin: 0 5px;
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .info-box h6 {
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .bi {
+            margin-right: 5px;
+        }
 
         /* Адаптивность */
         @media (max-width: 768px) {
@@ -702,38 +767,90 @@
         }
     }
 
+    // В функции createDctVisualization добавьте:
     async function createDctVisualization(dctCoeffs, width, height, serverData = null) {
         try {
             let spectrumUrl;
+            let heatmapUrl = null;
 
-            // Если сервер вернул путь к спектру, используем его
-            if (serverData && serverData.spectrum_path) {
+            // Если сервер вернул несколько спектров
+            if (serverData && serverData.spectrum_paths) {
+                spectrumUrl = serverData.main_spectrum ||
+                    serverData.spectrum_paths.color ||
+                    serverData.spectrum_paths.heatmap ||
+                    serverData.spectrum_paths.simple;
+
+                if (serverData.spectrum_paths.heatmap) {
+                    heatmapUrl = serverData.spectrum_paths.heatmap;
+                }
+            } else if (serverData && serverData.spectrum_path) {
                 spectrumUrl = serverData.spectrum_path;
             } else {
-                // Иначе создаем спектр локально
                 spectrumUrl = await createDctSpectrumLocal(dctCoeffs, width, height);
             }
 
-            // Обновляем интерфейс с результатами
+            // Обновляем интерфейс
             const task3Results = document.getElementById('task3Results');
             const uploadedImage = document.getElementById('uploadedImage');
+
+            let spectrumHTML = `
+            <h5>Спектр DCT (логарифмическая шкала)</h5>
+            <img src="${spectrumUrl}" id="dctSpectrumImg" class="image-preview"
+                 alt="Спектр DCT" style="max-width: 100%; max-height: 300px; border: 1px solid #ddd;">
+            <div class="mt-2 text-center">
+                <small class="text-muted">
+                    <i class="bi bi-info-circle"></i> Цветовая шкала: синий (малые значения) → красный (большие значения)
+                </small>
+            </div>
+        `;
+
+            if (heatmapUrl) {
+                spectrumHTML += `
+                <div class="mt-3">
+                    <h6>Тепловая карта (альтернативный вид)</h6>
+                    <img src="${heatmapUrl}" class="image-preview"
+                         alt="Тепловая карта DCT" style="max-width: 100%; max-height: 200px; border: 1px solid #ddd;">
+                </div>
+            `;
+            }
 
             task3Results.innerHTML = `
             <h3>Результаты 2D DCT</h3>
             <div class="row">
                 <div class="col-md-6">
                     <h5>Исходное изображение</h5>
-                    <img src="${uploadedImage.src}" id="originalImgPreview" class="image-preview" alt="Оригинал" style="max-width: 100%; max-height: 300px;">
-                    <p class="text-center mt-2"><small>${width} × ${height} пикселей, градации серого</small></p>
+                    <img src="${uploadedImage.src}" id="originalImgPreview" class="image-preview"
+                         alt="Оригинал" style="max-width: 100%; max-height: 300px;">
+                    <p class="text-center mt-2">
+                        <small>${width} × ${height} пикселей, градации серого</small>
+                    </p>
                 </div>
                 <div class="col-md-6">
-                    <h5>Спектр DCT (логарифмическая шкала)</h5>
-                    <img src="${spectrumUrl}" id="dctSpectrumImg" class="image-preview" alt="Спектр DCT" style="max-width: 100%; max-height: 300px;">
+                    ${spectrumHTML}
                     <p class="text-center mt-2">
                         <small>
-                            Энергия: <span id="energyPercent">${serverData?.energy_analysis?.energy_in_top_1_percent || '0'}%</span> в 1% коэффициентов
+                            <strong>Энергия:</strong>
+                            <span id="energyPercent" class="badge bg-primary">
+                                ${serverData?.energy_analysis?.energy_in_top_1_percent || '0'}%
+                            </span>
+                            в 1% коэффициентов
                         </small>
                     </p>
+                </div>
+            </div>
+
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="alert alert-info">
+                        <h6><i class="bi bi-lightbulb"></i> Как читать спектр DCT:</h6>
+                        <ul class="mb-0">
+                            <li><strong>Левый верхний угол (DC коэффициент)</strong> - средняя яркость изображения (самое яркое)</li>
+                            <li><strong>Ось X</strong> - горизонтальные частоты (влево → низкие, вправо → высокие)</li>
+                            <li><strong>Ось Y</strong> - вертикальные частоты (вверх → низкие, вниз → высокие)</li>
+                            <li><strong>Яркие/красные области</strong> - важные частотные компоненты</li>
+                            <li><strong>Темные/синие области</strong> - незначительные частоты</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 
@@ -741,13 +858,13 @@
                 <h5>Анализ распределения энергии</h5>
                 <div id="energyAnalysis" style="min-height: 100px;">
                     <div class="alert alert-info">
-                        <p>Вычисление распределения энергии...</p>
+                        <p><i class="bi bi-hourglass-split"></i> Вычисление распределения энергии...</p>
                     </div>
                 </div>
             </div>
         `;
 
-            // Автоматически запускаем анализ энергии через небольшой таймаут
+            // Автоматически запускаем анализ
             setTimeout(() => {
                 analyzeEnergyDistribution(dctCoeffs, width, height);
             }, 500);

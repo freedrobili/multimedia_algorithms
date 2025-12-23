@@ -616,25 +616,50 @@ class DctController extends Controller
     }
 
 // Также исправьте метод createDctSpectrumImage():
+    // Создание изображения спектра DCT с цветовой шкалой и подписями
+    // Создание изображения спектра DCT с поддержкой русских надписей
     private function createDctSpectrumImage(array $dctData, int $width, int $height): ?string
     {
         try {
-            Log::info("Создание изображения спектра DCT (логарифмическая шкала)...");
+            Log::info("Создание улучшенного спектра DCT с цветовой шкалой...");
+            Log::info("Размер спектра: {$width}x{$height}");
 
-            $spectrumData = [];
+            // ========== 1. СОЗДАЕМ ОСНОВНОЕ ИЗОБРАЖЕНИЕ СПЕКТРА ==========
+
+            // Увеличиваем размер для размещения шкалы и подписей
+            $padding = 80; // Место для шкалы и подписей
+            $spectrumWidth = $width + $padding;
+            $spectrumHeight = $height + $padding;
+
+            // Создаем GD изображение
+            $spectrumImage = imagecreatetruecolor($spectrumWidth, $spectrumHeight);
+
+            if (!$spectrumImage) {
+                Log::error("Не удалось создать GD изображение");
+                return null;
+            }
+
+            // Заполняем фон
+            $bgColor = imagecolorallocate($spectrumImage, 30, 30, 30); // Темно-серый фон
+            $gridColor = imagecolorallocate($spectrumImage, 60, 60, 60); // Сетка
+            $textColor = imagecolorallocate($spectrumImage, 200, 200, 200); // Текст
+            $axisColor = imagecolorallocate($spectrumImage, 100, 100, 200); // Оси
+
+            imagefill($spectrumImage, 0, 0, $bgColor);
+
+            // ========== 2. ВЫЧИСЛЯЕМ ЛОГАРИФМИЧЕСКИЕ ЗНАЧЕНИЯ ==========
+
+            $logData = [];
             $maxLogVal = 0.0001;
-            $minLogVal = INF;
+            $minLogVal = PHP_FLOAT_MAX;
 
-            // Преобразуем DCT коэффициенты в логарифмическую шкалу
             for ($y = 0; $y < $height; $y++) {
                 for ($x = 0; $x < $width; $x++) {
                     $absVal = abs($dctData[$y][$x]);
 
-                    // Логарифмическое преобразование (исправленное)
-                    // Добавляем 1 для избежания log(0)
-                    // Не умножаем на 1000, чтобы сохранить относительные величины
-                    $logVal = log(1 + $absVal);
-                    $spectrumData[$y][$x] = $logVal;
+                    // Логарифмическое преобразование с защитой от 0
+                    $logVal = log(1 + $absVal * 100); // Умножаем на 100 для лучшего контраста
+                    $logData[$y][$x] = $logVal;
 
                     if ($logVal > $maxLogVal) $maxLogVal = $logVal;
                     if ($logVal < $minLogVal) $minLogVal = $logVal;
@@ -643,40 +668,272 @@ class DctController extends Controller
 
             Log::info("Логарифмический диапазон: min=" . round($minLogVal, 4) . ", max=" . round($maxLogVal, 4));
 
-            // Создаем изображение спектра
-            $image = $this->imageManager->create($width, $height);
+            // ========== 3. СОЗДАЕМ ЦВЕТОВУЮ ПАЛИТРУ (JET colormap) ==========
+
+            $colorMap = $this->createJetColorMap(256);
+
+            // ========== 4. РИСУЕМ СПЕКТР ==========
 
             $range = $maxLogVal - $minLogVal;
-            if ($range < 0.0001) $range = 1; // Избегаем деления на ноль
+            if ($range < 0.0001) {
+                Log::warning("Диапазон слишком мал, использую range=1");
+                $range = 1;
+            }
 
-            Log::info("Нормализация в диапазон 0-255...");
+            // Позиция спектра на изображении
+            $spectrumX = 40;
+            $spectrumY = 40;
 
             for ($y = 0; $y < $height; $y++) {
                 for ($x = 0; $x < $width; $x++) {
-                    // Нормализуем к диапазону 0-1
-                    $normalized = ($spectrumData[$y][$x] - $minLogVal) / $range;
-                    $intensity = (int)($normalized * 255);
+                    // Нормализуем значение
+                    $normalized = ($logData[$y][$x] - $minLogVal) / $range;
+                    $normalized = max(0, min(1, $normalized));
 
-                    // Ограничиваем диапазон
-                    $intensity = max(0, min(255, $intensity));
-                    $image->drawPixel($x, $y, [$intensity, $intensity, $intensity]);
+                    // Получаем индекс цвета из палитры
+                    $colorIndex = (int)($normalized * 255);
+                    $color = $colorMap[$colorIndex];
+
+                    // Рисуем пиксель
+                    $pixelColor = imagecolorallocate($spectrumImage, $color[0], $color[1], $color[2]);
+                    imagesetpixel($spectrumImage, $spectrumX + $x, $spectrumY + $y, $pixelColor);
+
+                    // Освобождаем цвет
+                    imagecolordeallocate($spectrumImage, $pixelColor);
                 }
             }
 
-            // Сохраняем изображение
-            $filename = 'dct_spectrum_' . uniqid() . '.png';
+            // ========== 5. ДОБАВЛЯЕМ ЦВЕТОВУЮ ШКАЛУ ==========
+
+            $this->addColorScale($spectrumImage, $colorMap, $spectrumWidth - 30, $spectrumY, 20, $height, $minLogVal, $maxLogVal, $textColor);
+
+            // ========== 6. ДОБАВЛЯЕМ СЕТКУ И ПОДПИСИ ==========
+
+            // Рисуем рамку вокруг спектра
+            imagerectangle($spectrumImage, $spectrumX - 1, $spectrumY - 1,
+                $spectrumX + $width, $spectrumY + $height, $axisColor);
+
+            // ========== 7. ВЫДЕЛЯЕМ DC КОЭФФИЦИЕНТ ==========
+
+            $dcColor = imagecolorallocate($spectrumImage, 255, 255, 0); // Желтый
+            imagerectangle($spectrumImage, $spectrumX - 2, $spectrumY - 2,
+                $spectrumX + 2, $spectrumY + 2, $dcColor);
+
+            // ========== 8. РИСУЕМ СЕТКУ ЧАСТОТ ==========
+
+            // Горизонтальные линии (каждые 32 коэффициента)
+            for ($i = 32; $i < $height; $i += 32) {
+                imageline($spectrumImage, $spectrumX, $spectrumY + $i,
+                    $spectrumX + $width, $spectrumY + $i, $gridColor);
+            }
+
+            // Вертикальные линии
+            for ($i = 32; $i < $width; $i += 32) {
+                imageline($spectrumImage, $spectrumX + $i, $spectrumY,
+                    $spectrumX + $i, $spectrumY + $height, $gridColor);
+            }
+
+            // ========== 9. ДОБАВЛЯЕМ ТЕКСТ С ПОДДЕРЖКОЙ РУССКИХ СИМВОЛОВ ==========
+
+            // Настройки для текста
+            $fontSize = 4; // 1-5 для встроенных шрифтов, или путь к .ttf файлу
+            $titleY = 15;
+            $footerY = $spectrumHeight - 25;
+
+            // Функция для добавления текста с поддержкой UTF-8
+            $this->addTextUTF8($spectrumImage, $textColor, $fontSize, $spectrumX, $spectrumY - 25, "Низкие частоты →");
+            $this->addTextUTF8($spectrumImage, $textColor, $fontSize, $spectrumX + $width - 120, $spectrumY + $height + 15, "← Высокие частоты");
+
+            // Добавляем информацию о спектре
+            $infoText = sprintf("Спектр DCT | Размер: %dx%d коэффициентов", $width, $height);
+            $this->addTextUTF8($spectrumImage, $textColor, 3, 10, $footerY, $infoText);
+
+            // Добавляем легенду
+            $legendY = $footerY - 20;
+            $this->addTextUTF8($spectrumImage, $textColor, 3, 10, $legendY, "Темные = малые значения, Яркие = большие значения");
+
+            // ========== 10. СОХРАНЯЕМ ИЗОБРАЖЕНИЕ ==========
+
+            $filename = 'dct_spectrum_color_' . uniqid() . '.png';
             $path = 'public/lab6/' . $filename;
             $fullPath = storage_path('app/' . $path);
 
-            $image->save($fullPath);
-            Log::info("Спектр сохранен: " . $path);
+            // Создаем директорию если нужно
+            $directory = dirname($fullPath);
+            if (!is_dir($directory)) {
+                mkdir($directory, 0755, true);
+            }
+
+            // Сохраняем PNG с высокой четкостью
+            if (imagepng($spectrumImage, $fullPath, 9)) {
+                $fileSize = filesize($fullPath);
+                Log::info("Цветной спектр сохранен: {$path} ({$fileSize} bytes)");
+            } else {
+                Log::error("Не удалось сохранить спектр: {$fullPath}");
+                return null;
+            }
+
+            // Очищаем память
+            imagedestroy($spectrumImage);
 
             return $path;
 
         } catch (\Exception $e) {
-            Log::error('Ошибка создания изображения спектра: ' . $e->getMessage());
+            Log::error('Ошибка создания цветного спектра: ' . $e->getMessage());
+            Log::error('Трассировка: ' . $e->getTraceAsString());
             return null;
         }
+    }
+
+// Новый метод для добавления текста с поддержкой UTF-8
+    private function addTextUTF8($image, $color, $fontSize, $x, $y, $text): void
+    {
+        // Если fontSize - это путь к .ttf файлу
+        if (is_string($fontSize) && file_exists($fontSize)) {
+            // Используем TrueType шрифт с поддержкой UTF-8
+            $font = $fontSize;
+            $fontSizeNum = 12; // Размер шрифта
+
+            // Конвертируем текст в нужную кодировку если необходимо
+            $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
+
+            // Добавляем текст
+            imagettftext($image, $fontSizeNum, 0, $x, $y, $color, $font, $text);
+        } else {
+            // Используем встроенный шрифт (ограниченная поддержка русских символов)
+            // Простой способ: заменяем русские символы на латинские аналоги или оставляем как есть
+            $text = $this->transliterateIfNeeded($text);
+            imagestring($image, (int)$fontSize, $x, $y, $text, $color);
+        }
+    }
+
+// Вспомогательный метод для транслитерации (если нет TrueType шрифтов)
+    private function transliterateIfNeeded(string $text): string
+    {
+        // Можно добавить простую транслитерацию, но лучше использовать TrueType шрифты
+        $translit = [
+            'а' => 'a', 'б' => 'b', 'в' => 'v', 'г' => 'g', 'д' => 'd',
+            'е' => 'e', 'ё' => 'yo', 'ж' => 'zh', 'з' => 'z', 'и' => 'i',
+            'й' => 'y', 'к' => 'k', 'л' => 'l', 'м' => 'm', 'н' => 'n',
+            'о' => 'o', 'п' => 'p', 'р' => 'r', 'с' => 's', 'т' => 't',
+            'у' => 'u', 'ф' => 'f', 'х' => 'h', 'ц' => 'ts', 'ч' => 'ch',
+            'ш' => 'sh', 'щ' => 'sch', 'ъ' => '', 'ы' => 'y', 'ь' => '',
+            'э' => 'e', 'ю' => 'yu', 'я' => 'ya',
+            'А' => 'A', 'Б' => 'B', 'В' => 'V', 'Г' => 'G', 'Д' => 'D',
+            'Е' => 'E', 'Ё' => 'Yo', 'Ж' => 'Zh', 'З' => 'Z', 'И' => 'I',
+            'Й' => 'Y', 'К' => 'K', 'Л' => 'L', 'М' => 'M', 'Н' => 'N',
+            'О' => 'O', 'П' => 'P', 'Р' => 'R', 'С' => 'S', 'Т' => 'T',
+            'У' => 'U', 'Ф' => 'F', 'Х' => 'H', 'Ц' => 'Ts', 'Ч' => 'Ch',
+            'Ш' => 'Sh', 'Щ' => 'Sch', 'Ъ' => '', 'Ы' => 'Y', 'Ь' => '',
+            'Э' => 'E', 'Ю' => 'Yu', 'Я' => 'Ya'
+        ];
+
+        return strtr($text, $translit);
+    }
+
+// Создание цветовой палитры Jet (синий-зеленый-красный)
+    private function createJetColorMap(int $size): array
+    {
+        $colorMap = [];
+
+        // Jet colormap (похож на MATLAB jet)
+        for ($i = 0; $i < $size; $i++) {
+            $pos = $i / ($size - 1);
+
+            if ($pos < 0.125) {
+                // От черного к синему
+                $r = 0;
+                $g = 0;
+                $b = (int)(127 + 128 * $pos / 0.125);
+            } elseif ($pos < 0.375) {
+                // От синего к голубому
+                $r = 0;
+                $g = (int)(255 * ($pos - 0.125) / 0.25);
+                $b = 255;
+            } elseif ($pos < 0.625) {
+                // От голубого к желтому
+                $r = (int)(255 * ($pos - 0.375) / 0.25);
+                $g = 255;
+                $b = (int)(255 * (0.625 - $pos) / 0.25);
+            } elseif ($pos < 0.875) {
+                // От желтого к красному
+                $r = 255;
+                $g = (int)(255 * (0.875 - $pos) / 0.25);
+                $b = 0;
+            } else {
+                // От красного к темно-красному
+                $r = (int)(255 * (1 - ($pos - 0.875) / 0.125));
+                $g = 0;
+                $b = 0;
+            }
+
+            $colorMap[$i] = [$r, $g, $b];
+        }
+
+        return $colorMap;
+    }
+
+// Добавление цветовой шкалы
+    private function addColorScale($image, array $colorMap, int $x, int $y, int $width, int $height,
+                                   float $minVal, float $maxVal, int $textColor): void
+    {
+        $scaleHeight = $height;
+        $scaleWidth = $width;
+
+        // Рисуем шкалу
+        for ($i = 0; $i < $scaleHeight; $i++) {
+            $normalized = 1 - ($i / $scaleHeight); // Инвертируем (высокие значения вверху)
+            $colorIndex = (int)($normalized * 255);
+            $color = $colorMap[$colorIndex];
+
+            $lineColor = imagecolorallocate($image, $color[0], $color[1], $color[2]);
+            imageline($image, $x, $y + $i, $x + $scaleWidth - 1, $y + $i, $lineColor);
+            imagecolordeallocate($image, $lineColor);
+        }
+
+        // Рамка вокруг шкалы
+        imagerectangle($image, $x - 1, $y - 1, $x + $scaleWidth, $y + $scaleHeight, $textColor);
+
+        // Подписи шкалы
+        $font = 2;
+        $step = $scaleHeight / 5;
+
+        for ($i = 0; $i <= 5; $i++) {
+            $posY = $y + $i * $step;
+            $value = $minVal + ($maxVal - $minVal) * (1 - $i/5);
+
+            // Линия деления
+            imageline($image, $x + $scaleWidth, $posY, $x + $scaleWidth + 5, $posY, $textColor);
+
+            // Подпись значения
+            $label = sprintf("%.2f", $value);
+            imagestring($image, $font, $x + $scaleWidth + 8, $posY - 5, $label, $textColor);
+        }
+
+        // Заголовок шкалы
+        imagestringup($image, 3, $x + $scaleWidth + 25, $y + $scaleHeight/2, 'log(1 + |coeff|)', $textColor);
+    }
+
+// Добавление информации о спектре
+    // Обновленный метод добавления информации о спектре
+    private function addSpectrumInfo($image, int $width, int $height, float $minVal, float $maxVal,
+                                     int $textColor, int $spectrumWidth, int $spectrumHeight): void
+    {
+        $infoY = $height - 30;
+
+        // Заголовок
+        $title = "SPECTR DCT (log scale)"; // Используем английский или транслитерацию
+        $titleWidth = imagefontwidth(4) * strlen($title);
+        imagestring($image, 4, ($width - $titleWidth) / 2, 10, $title, $textColor);
+
+        // Информация
+        $infoText = sprintf("Size: %dx%d | Range: %.2f - %.2f",
+            $spectrumWidth, $spectrumHeight, $minVal, $maxVal);
+        imagestring($image, 3, 10, $infoY, $infoText, $textColor);
+
+        // Легенда
+        $legendY = $height - 60;
+        imagestring($image, 3, 10, $legendY, "Dark = low values, Bright = high values", $textColor);
     }
 
 // ДОПОЛНИТЕЛЬНО: Добавьте этот метод для проверки входных данных
