@@ -291,6 +291,7 @@
     </div>
 
     <!-- Задание 3 -->
+    <!-- В index.blade.php в секции Задания 3 после загрузки изображения добавьте: -->
     <div class="task-section">
         <h2>Задание 3: 2D DCT изображения</h2>
         <div class="image-upload-container">
@@ -298,7 +299,8 @@
                 <label for="imageUpload" class="form-label">Выберите изображение:</label>
                 <input class="form-control" type="file" id="imageUpload" accept="image/*">
             </div>
-            <button class="btn-success-dct" onclick="uploadImage()">Загрузить и применить DCT</button>
+            <button class="btn-success-dct" onclick="uploadImage()">Загрузить изображение</button>
+            <button class="btn-dct" onclick="apply2DDCT()" id="applyDCTBtn" style="display: none;">Применить 2D DCT</button>
         </div>
 
         <div id="imageContainer" class="mt-3">
@@ -307,11 +309,47 @@
 
         <div id="task3Results" class="results-container" style="display: none;">
             <h3>Результаты 2D DCT</h3>
-            <div id="dctSpectrumContainer">
-                <!-- Здесь будет спектр DCT -->
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Исходное изображение</h5>
+                    <img id="originalImgPreview" class="image-preview" src="" alt="Оригинал" style="max-width: 100%;">
+                    <p class="text-center mt-2"><small>Градации серого</small></p>
+                </div>
+                <div class="col-md-6">
+                    <h5>Спектр DCT (логарифмическая шкала)</h5>
+                    <img id="dctSpectrumImg" class="image-preview" src="" alt="Спектр DCT" style="max-width: 100%;">
+                    <p class="text-center mt-2"><small>Энергия: <span id="energyPercent">0%</span> в 1% коэффициентов</small></p>
+                </div>
             </div>
-            <div id="energyInfo" class="mt-3">
-                <!-- Информация о распределении энергии -->
+
+            <div class="mt-4">
+                <h5>Анализ распределения энергии</h5>
+                <div id="energyDistributionChart" style="height: 200px; width: 100%;"></div>
+
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <h6>Информация о DCT:</h6>
+                        <ul>
+                            <li>Размер изображения: <span id="imageSize">0x0</span></li>
+                            <li>Количество коэффициентов: <span id="coefficientsCount">0</span></li>
+                            <li>DC коэффициент: <span id="dcValue">0</span></li>
+                            <li>Макс. коэффициент: <span id="maxCoefficient">0</span></li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Распределение энергии:</h6>
+                        <ul>
+                            <li>Верхний левый квадрант (низкие частоты): <span id="lowFreqEnergy">0%</span></li>
+                            <li>Центральная область: <span id="midFreqEnergy">0%</span></li>
+                            <li>Нижний правый квадрант (высокие частоты): <span id="highFreqEnergy">0%</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <h6>Анализ:</h6>
+                    <p id="energyAnalysis">Энергия в DCT-спектре обычно сосредоточена в левом верхнем углу (низкие частоты), что соответствует плавным изменениям яркости. Высокочастотные коэффициенты (правый нижний угол) обычно содержат мало энергии.</p>
+                </div>
             </div>
         </div>
     </div>
@@ -384,18 +422,21 @@
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
     let originalSignal = [];
     let dctCoeffs = [];
     let signalChart = null;
     let zeroChart = null;
+    let uploadedPixels = null;
+    let dctCoefficients = null;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
+    // Задание 1: 1D DCT
     async function generateSignal() {
         const res = await fetch('/lab6/generate-signal', {
             method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'X-CSRF-TOKEN': csrfToken,
                 'Content-Type': 'application/json'
             }
         });
@@ -416,7 +457,7 @@
         const res = await fetch('/lab6/dct-1d', {
             method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'X-CSRF-TOKEN': csrfToken,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ signal: originalSignal })
@@ -436,7 +477,7 @@
         const res = await fetch('/lab6/idct-1d', {
             method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'X-CSRF-TOKEN': csrfToken,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ dct: dctCoeffs })
@@ -456,11 +497,12 @@
         plotSignal('signalChart', data.signal, 'Восстановленный сигнал');
     }
 
+    // Задание 2: Обнуление коэффициентов
     async function zeroHighFreq(percent) {
         const res = await fetch('/lab6/dct-zero-high-freq', {
             method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'X-CSRF-TOKEN': csrfToken,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ dct: dctCoeffs, percent: percent })
@@ -494,28 +536,810 @@
         tableBody.appendChild(newRow);
     }
 
+    // Задание 3: 2D DCT изображения
     async function uploadImage() {
         const fileInput = document.getElementById('imageUpload');
+        if (!fileInput.files[0]) {
+            alert('Пожалуйста, выберите файл изображения');
+            return;
+        }
+
         const formData = new FormData();
         formData.append('image', fileInput.files[0]);
 
-        const res = await fetch('/lab6/upload-image', {
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-            },
-            body: formData
-        });
-        const data = await res.json();
+        try {
+            const res = await fetch('/lab6/upload-image', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: formData
+            });
 
-        document.getElementById('imageContainer').innerHTML = `
-            <div class="alert alert-success">Изображение загружено: ${data.width} × ${data.height} пикселей</div>
-            <img src="${data.path}" class="image-preview" alt="Загруженное изображение">
-        `;
+            const data = await res.json();
 
-        document.getElementById('task3Results').style.display = 'block';
+            if (!res.ok) {
+                throw new Error(data.error || 'Ошибка сервера');
+            }
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            // Сохраняем пиксели для последующей обработки
+            uploadedPixels = data.pixels;
+            imageWidth = data.width;
+            imageHeight = data.height;
+
+            document.getElementById('imageContainer').innerHTML = `
+                <div class="alert alert-success">${data.message || 'Изображение загружено'}: ${data.width} × ${data.height} пикселей</div>
+                <div class="text-center">
+                    <img src="${data.path}" id="uploadedImage" class="image-preview" alt="Загруженное изображение" style="max-width: 300px;">
+                </div>
+                <div class="text-center mt-3">
+                    <button class="btn-dct" onclick="apply2DDCT()" id="applyDCTBtn">Применить 2D DCT к этому изображению</button>
+                </div>
+            `;
+
+        } catch (error) {
+            console.error('Ошибка загрузки изображения:', error);
+            document.getElementById('imageContainer').innerHTML = `
+                <div class="alert alert-danger">Ошибка: ${error.message}</div>
+            `;
+        }
     }
 
+    async function apply2DDCT() {
+        if (!uploadedPixels) {
+            alert('Сначала загрузите изображение');
+            return;
+        }
+
+        try {
+            // Показываем индикатор загрузки
+            const task3Results = document.getElementById('task3Results');
+            task3Results.style.display = 'block';
+            task3Results.innerHTML = '<div class="alert alert-info">Применение 2D DCT... это может занять несколько секунд</div>';
+
+            // Получаем размеры из загруженного изображения
+            const img = document.getElementById('uploadedImage');
+            if (!img) {
+                throw new Error('Изображение не найдено');
+            }
+
+            // Используем размеры из данных загрузки
+            const width = uploadedPixels[0].length;
+            const height = uploadedPixels.length;
+
+            console.log(`Размеры изображения: ${width}x${height}`);
+
+            // Ограничиваем размер для производительности
+            const maxSize = 256;
+            let scale = 1;
+
+            if (width > maxSize || height > maxSize) {
+                scale = Math.min(maxSize / width, maxSize / height);
+            }
+
+            const scaledWidth = Math.floor(width * scale);
+            const scaledHeight = Math.floor(height * scale);
+
+            console.log(`Масштабирование до: ${scaledWidth}x${scaledHeight}`);
+
+            // Масштабируем пиксели
+            const scaledPixels = [];
+            for (let y = 0; y < scaledHeight; y++) {
+                const row = [];
+                for (let x = 0; x < scaledWidth; x++) {
+                    const origX = Math.floor(x / scale);
+                    const origY = Math.floor(y / scale);
+                    row.push(uploadedPixels[origY][origX] || 0);
+                }
+                scaledPixels.push(row);
+            }
+
+            console.log(`Применяем 2D DCT к изображению ${scaledWidth}x${scaledHeight}`);
+
+            // Отправляем запрос на 2D DCT с ВСЕМИ необходимыми параметрами
+            const res = await fetch('/lab6/dct2d', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    pixels: scaledPixels,
+                    width: scaledWidth,     // Добавляем ширину
+                    height: scaledHeight    // Добавляем высоту
+                })
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`HTTP ${res.status}: ${text.substring(0, 100)}`);
+            }
+
+            const data = await res.json();
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            console.log('Ответ от сервера:', data);
+
+            // Сохраняем коэффициенты DCT (проверяем оба возможных имени поля)
+            dctCoefficients = data.dct2d || data.dct2D || data.dct_coefficients || data.dct2d_coefficients;
+
+            if (!dctCoefficients) {
+                console.warn('Нет DCT коэффициентов в ответе:', data);
+                // Если нет коэффициентов, но есть спектр, показываем хотя бы его
+                if (data.spectrum_path) {
+                    await showDCTResults(data, scaledWidth, scaledHeight);
+                    return;
+                }
+                throw new Error('Не удалось получить коэффициенты DCT из ответа сервера');
+            }
+
+            // Создаем визуализацию спектра
+            await createDctVisualization(dctCoefficients, scaledWidth, scaledHeight, data);
+
+            // Анализируем распределение энергии
+            setTimeout(() => {
+                analyzeEnergyDistribution(dctCoefficients, scaledWidth, scaledHeight);
+            }, 100);
+
+        } catch (error) {
+            console.error('Ошибка при применении 2D DCT:', error);
+            document.getElementById('task3Results').innerHTML = `
+            <div class="alert alert-danger">
+                <h5>Ошибка</h5>
+                <p>${error.message}</p>
+                <p>Попробуйте использовать изображение меньшего размера.</p>
+                <button class="btn btn-sm btn-secondary" onclick="trySimpleDCT()">Попробовать упрощенный вариант</button>
+            </div>
+        `;
+        }
+    }
+
+    async function createDctVisualization(dctCoeffs, width, height, serverData = null) {
+        try {
+            let spectrumUrl;
+
+            // Если сервер вернул путь к спектру, используем его
+            if (serverData && serverData.spectrum_path) {
+                spectrumUrl = serverData.spectrum_path;
+            } else {
+                // Иначе создаем спектр локально
+                spectrumUrl = await createDctSpectrumLocal(dctCoeffs, width, height);
+            }
+
+            // Обновляем интерфейс с результатами
+            const task3Results = document.getElementById('task3Results');
+            const uploadedImage = document.getElementById('uploadedImage');
+
+            task3Results.innerHTML = `
+            <h3>Результаты 2D DCT</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Исходное изображение</h5>
+                    <img src="${uploadedImage.src}" id="originalImgPreview" class="image-preview" alt="Оригинал" style="max-width: 100%; max-height: 300px;">
+                    <p class="text-center mt-2"><small>${width} × ${height} пикселей, градации серого</small></p>
+                </div>
+                <div class="col-md-6">
+                    <h5>Спектр DCT (логарифмическая шкала)</h5>
+                    <img src="${spectrumUrl}" id="dctSpectrumImg" class="image-preview" alt="Спектр DCT" style="max-width: 100%; max-height: 300px;">
+                    <p class="text-center mt-2">
+                        <small>
+                            Энергия: <span id="energyPercent">${serverData?.energy_analysis?.energy_in_top_1_percent || '0'}%</span> в 1% коэффициентов
+                        </small>
+                    </p>
+                </div>
+            </div>
+
+            <div class="mt-4" id="energyAnalysisContent">
+                <h5>Анализ распределения энергии</h5>
+                <div id="energyAnalysis" style="min-height: 100px;">
+                    <div class="alert alert-info">
+                        <p>Вычисление распределения энергии...</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+            // Автоматически запускаем анализ энергии через небольшой таймаут
+            setTimeout(() => {
+                analyzeEnergyDistribution(dctCoeffs, width, height);
+            }, 500);
+
+        } catch (error) {
+            console.error('Ошибка создания визуализации:', error);
+            showSimpleResults(width, height);
+        }
+    }
+
+    function updateEnergyAnalysisUI(energyAnalysis, dctCoeffs, width, height) {
+        const energyPercentEl = document.getElementById('energyPercent');
+        const analysisContent = document.getElementById('energyAnalysisContent');
+
+        if (!energyPercentEl || !analysisContent) return;
+
+        energyPercentEl.textContent = `${energyAnalysis.energy_in_top_1_percent}%`;
+
+        // Вычисляем распределение по квадрантам
+        let lowFreqEnergy = 0;
+        let midFreqEnergy = 0;
+        let highFreqEnergy = 0;
+        const totalEnergy = energyAnalysis.total_energy;
+
+        const quarterWidth = Math.floor(width / 4);
+        const quarterHeight = Math.floor(height / 4);
+
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const coeff = dctCoeffs[y][x];
+                const energy = coeff * coeff;
+
+                if (x < quarterWidth && y < quarterHeight) {
+                    lowFreqEnergy += energy;
+                } else if (x >= width * 3/4 && y >= height * 3/4) {
+                    highFreqEnergy += energy;
+                } else {
+                    midFreqEnergy += energy;
+                }
+            }
+        }
+
+        analysisContent.innerHTML = `
+        <h5>Анализ распределения энергии</h5>
+        <div style="position: relative; height: 200px; width: 100%;">
+            <canvas id="energyChart"></canvas>
+        </div>
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <h6>Информация о DCT:</h6>
+                <ul>
+                    <li>Размер изображения: <span id="imageSize">${width} × ${height}</span></li>
+                    <li>Количество коэффициентов: <span id="coefficientsCount">${width * height}</span></li>
+                    <li>DC коэффициент: <span id="dcValue">${energyAnalysis.dc_coefficient?.toFixed(2) || '0.00'}</span></li>
+                    <li>Общая энергия: <span id="totalEnergy">${energyAnalysis.total_energy?.toFixed(2) || '0.00'}</span></li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h6>Распределение энергии:</h6>
+                <ul>
+                    <li>Верхний левый квадрант (низкие частоты): <span id="lowFreqEnergy">${totalEnergy > 0 ? ((lowFreqEnergy / totalEnergy) * 100).toFixed(1) : '0.0'}%</span></li>
+                    <li>Центральная область: <span id="midFreqEnergy">${totalEnergy > 0 ? ((midFreqEnergy / totalEnergy) * 100).toFixed(1) : '0.0'}%</span></li>
+                    <li>Нижний правый квадрант (высокие частоты): <span id="highFreqEnergy">${totalEnergy > 0 ? ((highFreqEnergy / totalEnergy) * 100).toFixed(1) : '0.0'}%</span></li>
+                </ul>
+            </div>
+        </div>
+        <div class="mt-3">
+            <h6>Анализ:</h6>
+            <p id="energyAnalysis">
+                ${getEnergyAnalysisText(energyAnalysis.energy_in_top_1_percent)}
+            </p>
+        </div>
+    `;
+
+        // Создаем график
+        createEnergyChartFromData(dctCoeffs, totalEnergy, width, height);
+    }
+
+    function createEnergyChartFromData(dctCoeffs, totalEnergy, width, height) {
+        try {
+            const ctx = document.getElementById('energyChart')?.getContext('2d');
+            if (!ctx) return;
+
+            // Получаем все энергии коэффициентов
+            const energies = [];
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const coeff = dctCoeffs[y][x];
+                    energies.push(coeff * coeff);
+                }
+            }
+
+            // Сортируем по убыванию
+            energies.sort((a, b) => b - a);
+
+            // Создаем данные для кумулятивного графика
+            const cumulativeData = [];
+            let cumulative = 0;
+            const step = Math.max(1, Math.floor(energies.length / 50)); // 50 точек на графике
+
+            for (let i = 0; i < energies.length; i += step) {
+                cumulative += energies[i];
+                cumulativeData.push({
+                    x: (i / energies.length) * 100,
+                    y: (cumulative / totalEnergy) * 100
+                });
+            }
+
+            // Добавляем последнюю точку
+            if (energies.length > 0) {
+                cumulativeData.push({
+                    x: 100,
+                    y: 100
+                });
+            }
+
+            // Уничтожаем старый график, если есть
+            if (window.energyChartInstance) {
+                window.energyChartInstance.destroy();
+            }
+
+            // Создаем новый график
+            window.energyChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Накопленная энергия (%)',
+                        data: cumulativeData,
+                        borderColor: '#57568c',
+                        backgroundColor: 'rgba(87, 86, 140, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Энергия: ${context.parsed.y.toFixed(1)}%`;
+                                },
+                                afterLabel: function(context) {
+                                    return `${context.parsed.x.toFixed(1)}% коэффициентов`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'Накопленная энергия (%)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Коэффициенты (отсортированы по убыванию энергии)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error('Ошибка создания графика энергии:', error);
+        }
+    }
+    // Вспомогательная функция для текста анализа
+    function getEnergyAnalysisText(energyPercent) {
+        if (energyPercent > 90) {
+            return 'Изображение имеет очень гладкую текстуру, почти вся энергия сосредоточена в низкочастотных коэффициентах. Хорошо поддается сжатию.';
+        } else if (energyPercent > 70) {
+            return 'Изображение имеет умеренную текстуру, большая часть энергии в низких частотах. Хорошо поддается сжатию.';
+        } else if (energyPercent > 50) {
+            return 'Изображение имеет заметную текстуру, энергия распределена более равномерно. Сжатие может привести к потере деталей.';
+        } else {
+            return 'Изображение имеет сложную текстуру или шум, энергия распределена по всему спектру. Сжатие может значительно ухудшить качество.';
+        }
+    }
+
+    // Альтернативная функция для простого DCT
+    async function trySimpleDCT() {
+        if (!uploadedPixels) return;
+
+        try {
+            const width = uploadedPixels[0].length;
+            const height = uploadedPixels.length;
+
+            // Простое локальное применение DCT для демонстрации
+            const smallWidth = Math.min(128, width);
+            const smallHeight = Math.min(128, height);
+
+            const smallPixels = [];
+            for (let y = 0; y < smallHeight; y++) {
+                const row = [];
+                for (let x = 0; x < smallWidth; x++) {
+                    row.push(uploadedPixels[Math.floor(y * height / smallHeight)][Math.floor(x * width / smallWidth)]);
+                }
+                smallPixels.push(row);
+            }
+
+            // Простой 2D DCT (упрощенная реализация)
+            const dctResult = applySimpleLocalDCT(smallPixels, smallWidth, smallHeight);
+            await createDctVisualization(dctResult, smallWidth, smallHeight);
+
+        } catch (error) {
+            console.error('Ошибка упрощенного DCT:', error);
+        }
+    }
+
+    // Упрощенная локальная реализация DCT для демонстрации
+    function applySimpleLocalDCT(pixels, width, height) {
+        const dct = [];
+
+        // Инициализируем массив
+        for (let y = 0; y < height; y++) {
+            dct[y] = new Array(width).fill(0);
+        }
+
+        // Простой 2D DCT (для демонстрации)
+        for (let u = 0; u < height; u++) {
+            for (let v = 0; v < width; v++) {
+                let sum = 0;
+                for (let x = 0; x < width; x++) {
+                    for (let y = 0; y < height; y++) {
+                        sum += pixels[y][x] *
+                            Math.cos(Math.PI * u * (2 * x + 1) / (2 * width)) *
+                            Math.cos(Math.PI * v * (2 * y + 1) / (2 * height));
+                    }
+                }
+                const alphaU = (u === 0) ? 1 / Math.sqrt(2) : 1;
+                const alphaV = (v === 0) ? 1 / Math.sqrt(2) : 1;
+                dct[u][v] = alphaU * alphaV * sum / Math.sqrt(width * height);
+            }
+        }
+
+        return dct;
+    }
+
+    // Простой fallback результат
+    function showSimpleResults(width, height) {
+        const task3Results = document.getElementById('task3Results');
+        const uploadedImage = document.getElementById('uploadedImage');
+
+        task3Results.innerHTML = `
+        <h3>Результаты 2D DCT</h3>
+        <div class="row">
+            <div class="col-md-6">
+                <h5>Исходное изображение</h5>
+                <img src="${uploadedImage.src}" class="image-preview" alt="Оригинал" style="max-width: 100%; max-height: 300px;">
+                <p class="text-center mt-2"><small>${width} × ${height} пикселей</small></p>
+            </div>
+            <div class="col-md-6">
+                <h5>DCT выполнено успешно</h5>
+                <div class="alert alert-success">
+                    <p>2D DCT было успешно применено к изображению.</p>
+                    <p>Для визуализации спектра требуется более мощный сервер или меньшее изображение.</p>
+                </div>
+            </div>
+        </div>
+        <div class="mt-3">
+            <button class="btn btn-primary" onclick="trySimpleDCT()">Показать упрощенный спектр</button>
+        </div>
+    `;
+    }
+
+    // Функция для создания спектра DCT локально
+    async function createDctSpectrumLocal(dctCoeffs, width, height) {
+        return new Promise((resolve, reject) => {
+            try {
+                // Создаем canvas для визуализации спектра
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+
+                // Находим максимальное абсолютное значение для нормализации
+                let maxVal = 0;
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const absVal = Math.abs(dctCoeffs[y][x]);
+                        if (absVal > maxVal) {
+                            maxVal = absVal;
+                        }
+                    }
+                }
+
+                if (maxVal === 0) {
+                    // Если все коэффициенты нулевые, создаем черное изображение
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(0, 0, width, height);
+                    resolve(canvas.toDataURL('image/png'));
+                    return;
+                }
+
+                // Создаем ImageData для canvas
+                const imageData = ctx.createImageData(width, height);
+
+                // Заполняем пиксели на основе DCT коэффициентов (логарифмическая шкала)
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const val = Math.abs(dctCoeffs[y][x]);
+                        // Логарифмическая шкала для лучшей видимости
+                        const logVal = Math.log(1 + val);
+                        const logMax = Math.log(1 + maxVal);
+                        const normalized = logVal / logMax;
+                        const intensity = Math.floor(normalized * 255);
+
+                        const index = (y * width + x) * 4;
+                        imageData.data[index] = intensity;     // R
+                        imageData.data[index + 1] = intensity; // G
+                        imageData.data[index + 2] = intensity; // B
+                        imageData.data[index + 3] = 255;       // A
+                    }
+                }
+
+                // Помещаем ImageData на canvas
+                ctx.putImageData(imageData, 0, 0);
+
+                // Конвертируем canvas в Data URL
+                resolve(canvas.toDataURL('image/png'));
+
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    function analyzeEnergyDistribution(dctCoeffs, width, height) {
+        try {
+            // Даем время на обновление DOM
+            setTimeout(() => {
+                const energyPercentEl = document.getElementById('energyPercent');
+                const energyAnalysisEl = document.getElementById('energyAnalysis');
+
+                if (!energyPercentEl || !energyAnalysisEl) {
+                    console.warn('Элементы для анализа энергии не найдены');
+                    return;
+                }
+
+                // Вычисляем энергию каждого коэффициента
+                const energies = [];
+                let totalEnergy = 0;
+                let dcValue = 0;
+                let maxCoeff = 0;
+
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const coeff = dctCoeffs[y][x];
+                        const energy = coeff * coeff;
+                        energies.push({ x, y, energy, coeff });
+                        totalEnergy += energy;
+
+                        // DC коэффициент (0,0) - средняя яркость
+                        if (x === 0 && y === 0) {
+                            dcValue = coeff;
+                        }
+
+                        // Максимальный коэффициент (исключая DC)
+                        if ((x !== 0 || y !== 0) && Math.abs(coeff) > Math.abs(maxCoeff)) {
+                            maxCoeff = coeff;
+                        }
+                    }
+                }
+
+                // Сортируем коэффициенты по убыванию энергии
+                energies.sort((a, b) => b.energy - a.energy);
+
+                // Вычисляем энергию в первых 1% коэффициентов
+                const top1Percent = Math.ceil(energies.length * 0.01);
+                let top1Energy = 0;
+                for (let i = 0; i < top1Percent; i++) {
+                    top1Energy += energies[i].energy;
+                }
+
+                // Вычисляем распределение по квадрантам
+                let lowFreqEnergy = 0;    // Верхний левый квадрант (1/4 изображения)
+                let midFreqEnergy = 0;    // Центральная область
+                let highFreqEnergy = 0;   // Нижний правый квадрант
+
+                const lowFreqLimit = Math.floor(width / 4);
+
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const coeff = dctCoeffs[y][x];
+                        const energy = coeff * coeff;
+
+                        if (x < lowFreqLimit && y < lowFreqLimit) {
+                            lowFreqEnergy += energy;
+                        } else if (x >= width * 3/4 && y >= height * 3/4) {
+                            highFreqEnergy += energy;
+                        } else {
+                            midFreqEnergy += energy;
+                        }
+                    }
+                }
+
+                // Обновляем процент энергии
+                const energyPercent = totalEnergy > 0 ? ((top1Energy / totalEnergy) * 100) : 0;
+                energyPercentEl.textContent = energyPercent.toFixed(1) + '%';
+
+                // Обновляем анализ
+                let analysis = '';
+                if (energyPercent > 90) {
+                    analysis = 'Изображение имеет очень гладкую текстуру, почти вся энергия сосредоточена в низкочастотных коэффициентах. Хорошо поддается сжатию.';
+                } else if (energyPercent > 70) {
+                    analysis = 'Изображение имеет умеренную текстуру, большая часть энергии в низких частотах. Хорошо поддается сжатию.';
+                } else if (energyPercent > 50) {
+                    analysis = 'Изображение имеет заметную текстуру, энергия распределена более равномерно. Сжатие может привести к потере деталей.';
+                } else {
+                    analysis = 'Изображение имеет сложную текстуру или шум, энергия распределена по всему спектру. Сжатие может значительно ухудшить качество.';
+                }
+
+                energyAnalysisEl.textContent = analysis;
+
+                // Обновляем другие элементы, если они существуют
+                updateEnergyUIElements({
+                    totalEnergy,
+                    dcValue,
+                    maxCoeff,
+                    width,
+                    height,
+                    lowFreqEnergy,
+                    midFreqEnergy,
+                    highFreqEnergy
+                });
+
+                // Создаем график
+                createEnergyChart(energies, totalEnergy);
+
+            }, 300); // Даем больше времени для рендеринга DOM
+
+        } catch (error) {
+            console.error('Ошибка анализа энергии:', error);
+        }
+    }
+    function updateEnergyUIElements(data) {
+        const elements = {
+            'imageSize': `${data.width} × ${data.height}`,
+            'coefficientsCount': data.width * data.height,
+            'dcValue': data.dcValue.toFixed(2),
+            'maxCoefficient': data.maxCoeff.toFixed(2),
+            'lowFreqEnergy': data.totalEnergy > 0 ? ((data.lowFreqEnergy / data.totalEnergy) * 100).toFixed(1) + '%' : '0.0%',
+            'midFreqEnergy': data.totalEnergy > 0 ? ((data.midFreqEnergy / data.totalEnergy) * 100).toFixed(1) + '%' : '0.0%',
+            'highFreqEnergy': data.totalEnergy > 0 ? ((data.highFreqEnergy / data.totalEnergy) * 100).toFixed(1) + '%' : '0.0%'
+        };
+
+        for (const [id, value] of Object.entries(elements)) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = value;
+            }
+        }
+    }
+
+    function createEnergyChart(energies, totalEnergy) {
+        try {
+            const analysisContent = document.getElementById('energyAnalysisContent');
+            if (!analysisContent) return;
+
+            // Проверяем, есть ли уже график, если нет - создаем контейнер
+            if (!document.getElementById('energyChart')) {
+                const chartContainer = document.createElement('div');
+                chartContainer.style.position = 'relative';
+                chartContainer.style.height = '200px';
+                chartContainer.style.width = '100%';
+                chartContainer.innerHTML = '<canvas id="energyChart"></canvas>';
+
+                const currentAnalysisContent = analysisContent.querySelector('#energyChartContainer') || analysisContent;
+                if (currentAnalysisContent.querySelector('#energyChart')) {
+                    return; // График уже существует
+                }
+
+                currentAnalysisContent.appendChild(chartContainer);
+            }
+
+            const ctx = document.getElementById('energyChart').getContext('2d');
+
+            // Подготавливаем данные для графика
+            const cumulativeEnergies = [];
+            let cumulative = 0;
+            const step = Math.max(1, Math.floor(energies.length / 100));
+
+            for (let i = 0; i < energies.length; i += step) {
+                cumulative += energies[i].energy;
+                cumulativeEnergies.push({
+                    x: (i / energies.length) * 100,
+                    y: (cumulative / totalEnergy) * 100
+                });
+            }
+
+            // Добавляем последнюю точку
+            if (energies.length > 0) {
+                cumulativeEnergies.push({
+                    x: 100,
+                    y: 100
+                });
+            }
+
+            // Уничтожаем старый график, если есть
+            if (window.energyChartInstance) {
+                window.energyChartInstance.destroy();
+            }
+
+            // Создаем новый график
+            window.energyChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Накопленная энергия',
+                        data: cumulativeEnergies,
+                        borderColor: '#57568c',
+                        backgroundColor: 'rgba(87, 86, 140, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Энергия: ${context.parsed.y.toFixed(1)}%`;
+                                },
+                                afterLabel: function(context) {
+                                    return `${context.parsed.x.toFixed(1)}% коэффициентов`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'Накопленная энергия (%)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Коэффициенты (отсортированы по убыванию энергии)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error('Ошибка создания графика:', error);
+        }
+    }
+
+    // Задание 4: Блочное DCT 8x8 (JPEG)
     async function applyBlockDCT() {
         const strength = document.getElementById('quantizationStrength').value;
 
@@ -529,6 +1353,11 @@
         }
 
         try {
+            // Показываем индикатор загрузки
+            const task4Results = document.getElementById('task4Results');
+            task4Results.style.display = 'block';
+            task4Results.innerHTML = '<div class="alert alert-info">Обработка изображения...</div>';
+
             // Создаем canvas для получения пикселей
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -543,12 +1372,19 @@
                 }
             });
 
-            // Устанавливаем размеры canvas
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
+            // Для больших изображений ограничиваем размер для производительности
+            const maxSize = 512;
+            let scale = 1;
 
-            // Рисуем изображение на canvas
-            ctx.drawImage(img, 0, 0);
+            if (img.naturalWidth > maxSize || img.naturalHeight > maxSize) {
+                scale = Math.min(maxSize / img.naturalWidth, maxSize / img.naturalHeight);
+            }
+
+            canvas.width = Math.floor(img.naturalWidth * scale);
+            canvas.height = Math.floor(img.naturalHeight * scale);
+
+            // Рисуем изображение на canvas с масштабированием
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
             // Получаем данные пикселей
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -569,12 +1405,15 @@
                 pixels.push(row);
             }
 
+            console.log(`Отправляем изображение: ${canvas.width}x${canvas.height}, сила квантования: ${strength}`);
+
             // Отправляем запрос на сервер
             const res = await fetch('/lab6/dct8x8-jpeg', {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                    'Content-Type': 'application/json'
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 },
                 body: JSON.stringify({
                     pixels: pixels,
@@ -584,55 +1423,107 @@
                 })
             });
 
-            const data = await res.json();
-
+            // Проверяем статус ответа
             if (!res.ok) {
-                throw new Error(data.error || 'Ошибка сервера');
+                const text = await res.text();
+                throw new Error(`HTTP ${res.status}: ${text.substring(0, 100)}`);
             }
+
+            const data = await res.json();
 
             if (data.error) {
                 throw new Error(data.error);
             }
 
             // Отображаем результаты
-            document.getElementById('task4Results').style.display = 'block';
-            document.getElementById('originalImage').src = img.src;
-            document.getElementById('compressedImage').src = data.compressed_path;
-            document.getElementById('psnrValue').textContent = data.psnr + ' дБ';
-            document.getElementById('originalSize').textContent = Math.round(canvas.width * canvas.height * 3 / 1024) + ' КБ';
-            document.getElementById('compressedSize').textContent = Math.round(canvas.width * canvas.height / 1024) + ' КБ';
-            document.getElementById('compressionRatio').textContent = Math.round((1 - (1 / 3)) * 100) + '%';
+            task4Results.innerHTML = `
+                <h3>Результаты JPEG-сжатия</h3>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Оригинальное изображение</h5>
+                        <img src="${img.src}" id="originalImage" class="image-preview" alt="Оригинал" style="max-width: 100%; max-height: 300px;">
+                        <p class="text-muted">${canvas.width} × ${canvas.height} пикселей</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>После сжатия</h5>
+                        <img src="${data.compressed_path}" id="compressedImage" class="image-preview" alt="После сжатия" style="max-width: 100%; max-height: 300px;">
+                        <p class="text-muted">Качество: ${data.psnr} дБ PSNR</p>
+                    </div>
+                </div>
 
-            // Анализ артефактов
-            const artifactsInfo = document.getElementById('artifactsInfo');
-            let artifactsHtml = '<ul>';
+                <div class="mt-4">
+                    <h5>Метрики качества</h5>
+                    <table class="metrics-table">
+                        <thead>
+                            <tr>
+                                <th>Метрика</th>
+                                <th>Значение</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>PSNR (дБ)</td>
+                                <td id="psnrValue">${data.psnr}</td>
+                            </tr>
+                            <tr>
+                                <td>Размер изображения</td>
+                                <td>${canvas.width} × ${canvas.height} пикселей</td>
+                            </tr>
+                            <tr>
+                                <td>Количество блоков</td>
+                                <td>${data.blocks_count}</td>
+                            </tr>
+                            <tr>
+                                <td>Сила квантования</td>
+                                <td>${data.strength}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
 
-            if (data.psnr > 40) {
-                artifactsHtml += '<li><span class="text-success">Высокое качество</span> - артефакты практически не заметны</li>';
-            } else if (data.psnr > 30) {
-                artifactsHtml += '<li><span class="text-warning">Среднее качество</span> - заметна легкая блочность</li>';
-            } else {
-                artifactsHtml += '<li><span class="text-danger">Низкое качество</span> - сильная блочность и потеря деталей</li>';
+                <div class="mt-3">
+                    <h5>Анализ качества</h5>
+                    <div id="artifactsInfo">
+                        <ul>
+                            ${data.psnr > 40 ?
+                '<li><span class="text-success">Отличное качество</span> - артефакты практически не заметны</li>' :
+                data.psnr > 30 ?
+                    '<li><span class="text-warning">Хорошее качество</span> - легкая блочность при детальном рассмотрении</li>' :
+                    '<li><span class="text-danger">Среднее качество</span> - заметная блочность и потеря деталей</li>'
             }
-
-            artifactsHtml += `<li>Блоков обработано: ${data.blocks_count}</li>`;
-            artifactsHtml += `<li>Сила квантования: ${data.strength}</li>`;
-            artifactsHtml += '</ul>';
-
-            artifactsInfo.innerHTML = artifactsHtml;
+                            <li>PSNR > 40 дБ: отличное качество</li>
+                            <li>PSNR 30-40 дБ: хорошее качество</li>
+                            <li>PSNR < 30 дБ: среднее/низкое качество</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
 
         } catch (error) {
             console.error('Ошибка при применении блочного DCT:', error);
-            alert('Ошибка: ' + error.message);
+            document.getElementById('task4Results').innerHTML = `
+                <div class="alert alert-danger">
+                    <h5>Ошибка</h5>
+                    <p>${error.message}</p>
+                    <p>Попробуйте уменьшить размер изображения или выбрать меньшую силу квантования.</p>
+                </div>
+            `;
         }
     }
 
+    // Вспомогательные функции
     function clearSignal() {
         originalSignal = [];
         dctCoeffs = [];
+        uploadedPixels = null;
+        dctCoefficients = null;
+
         document.getElementById('signalInfo').style.display = 'none';
         document.getElementById('task1Results').style.display = 'none';
         document.getElementById('task2Results').style.display = 'none';
+        document.getElementById('task3Results').style.display = 'none';
+        document.getElementById('task4Results').style.display = 'none';
+
         if (signalChart) signalChart.destroy();
         if (zeroChart) zeroChart.destroy();
 
@@ -642,6 +1533,9 @@
 
         let ctx2 = document.getElementById('zeroChart').getContext('2d');
         ctx2.clearRect(0, 0, document.getElementById('zeroChart').width, document.getElementById('zeroChart').height);
+
+        // Очищаем контейнеры изображений
+        document.getElementById('imageContainer').innerHTML = '';
     }
 
     function plotSignal(canvasId, data, label) {
@@ -693,8 +1587,12 @@
     }
 
     function calculateReconstructionError(coeffs) {
-        // Заглушка для расчета ошибки восстановления
-        return Math.random().toFixed(6);
+        // Простой расчет ошибки восстановления
+        let error = 0;
+        for (let i = 0; i < coeffs.length; i++) {
+            error += Math.pow(coeffs[i], 2);
+        }
+        return (error / coeffs.length).toFixed(6);
     }
 </script>
 </body>

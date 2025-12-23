@@ -61,6 +61,7 @@ Route::prefix('lab6')->group(function () {
     Route::post('/idct-1d', [DctController::class, 'idct1D'])->name('lab6.idct1d');
     Route::post('/dct-zero-high-freq', [DctController::class, 'zeroHighFreq'])->name('lab6.zero-high-freq');
     Route::post('/upload-image', [DctController::class, 'uploadImage'])->name('lab6.upload-image');
-    Route::post('/dct-2d', [DctController::class, 'dct2D'])->name('lab6.dct2d');
-    Route::post('/dct-8x8-jpeg', [DctController::class, 'dct8x8JPEG'])->name('lab6.dct-8x8-jpeg');
+    Route::post('/dct2d', [DctController::class, 'dct2D'])->name('lab6.dct2d');
+    Route::post('/dct8x8-jpeg', [DctController::class, 'dct8x8JPEG'])->name('lab6.dct8x8-jpeg');
+    Route::post('/get-dct-spectrum', [DctController::class, 'getDctSpectrum'])->name('lab6.get-dct-spectrum'); // ← ДОБАВЬТЕ ЭТУ СТРОЧКУ
 });
