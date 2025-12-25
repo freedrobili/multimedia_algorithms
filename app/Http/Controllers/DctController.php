@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
-use Intervention\Image\Image;
 
 class DctController extends Controller
 {
@@ -15,7 +14,6 @@ class DctController extends Controller
 
     public function __construct()
     {
-        // Инициализация ImageManager с драйвером GD
         $this->imageManager = new ImageManager(new Driver());
     }
 
@@ -24,7 +22,6 @@ class DctController extends Controller
         return view('lab6.index');
     }
 
-    // Задание 1: генерация сигнала
     public function generateSignal(Request $request)
     {
         try {
@@ -40,7 +37,6 @@ class DctController extends Controller
         }
     }
 
-    // Прямое DCT-II
     public function dct1D(Request $request)
     {
         try {
@@ -98,7 +94,6 @@ class DctController extends Controller
         }
     }
 
-    // Задание 2: обнуление высокочастотных коэффициентов
     public function zeroHighFreq(Request $request)
     {
         try {
@@ -123,26 +118,19 @@ class DctController extends Controller
         }
     }
 
-    // Задание 3: загрузка изображения
-    // Задание 3: загрузка изображения (ИСПРАВЛЕННАЯ ВЕРСИЯ)
-    // Задание 3: загрузка изображения (ИСПРАВЛЕННАЯ ВЕРСИЯ)
-    // Задание 3: загрузка изображения (РАБОЧАЯ ВЕРСИЯ)
     public function uploadImage(Request $request)
     {
         try {
-            // Проверяем наличие файла
             if (!$request->hasFile('image')) {
                 return response()->json(['error' => 'Файл не загружен'], 400);
             }
 
             $file = $request->file('image');
 
-            // Проверяем валидность файла
             if (!$file->isValid()) {
                 return response()->json(['error' => 'Неверный файл'], 400);
             }
 
-            // Проверяем расширение файла
             $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
             $extension = strtolower($file->getClientOriginalExtension());
 
@@ -150,29 +138,22 @@ class DctController extends Controller
                 return response()->json(['error' => 'Неподдерживаемый формат изображения: ' . $extension], 400);
             }
 
-            // Создаем директорию, если её нет
             $directory = 'public/lab6';
             if (!Storage::exists($directory)) {
                 Storage::makeDirectory($directory);
             }
 
-            // Генерируем уникальное имя файла
             $filename = uniqid() . '_' . time() . '.' . $extension;
             $path = $directory . '/' . $filename;
 
-            // Сохраняем оригинальный файл
             $file->move(storage_path('app/' . $directory), $filename);
 
-            // Полный путь к файлу
             $fullPath = storage_path('app/' . $path);
 
             if (!file_exists($fullPath)) {
                 return response()->json(['error' => 'Файл не был сохранен'], 500);
             }
 
-            // ========== СПОСОБ 1: Простой и надежный через GD ==========
-
-            // Получаем информацию об изображении
             $imageInfo = @getimagesize($fullPath);
             if (!$imageInfo) {
                 return response()->json(['error' => 'Неверный формат изображения'], 400);
@@ -182,7 +163,6 @@ class DctController extends Controller
 
             Log::info("Изображение: {$width}x{$height}, тип: {$type}");
 
-            // Загружаем изображение в зависимости от типа
             $gdImage = null;
             switch ($type) {
                 case IMAGETYPE_JPEG:
@@ -204,7 +184,6 @@ class DctController extends Controller
                     $gdImage = @imagecreatefromwebp($fullPath);
                     break;
                 default:
-                    // Пробуем загрузить как строку
                     $fileContent = file_get_contents($fullPath);
                     if ($fileContent !== false) {
                         $gdImage = @imagecreatefromstring($fileContent);
@@ -215,10 +194,8 @@ class DctController extends Controller
                 return response()->json(['error' => 'Не удалось загрузить изображение'], 500);
             }
 
-            // Создаем новое изображение для grayscale
             $grayImage = imagecreatetruecolor($width, $height);
 
-            // Добавляем поддержку прозрачности для PNG
             if ($type == IMAGETYPE_PNG) {
                 imagealphablending($grayImage, false);
                 imagesavealpha($grayImage, true);
@@ -226,7 +203,6 @@ class DctController extends Controller
                 imagefill($grayImage, 0, 0, $transparent);
             }
 
-            // Конвертируем в grayscale и извлекаем пиксели
             $pixels = [];
             $sampleValues = [];
             $totalBrightness = 0;
@@ -237,33 +213,26 @@ class DctController extends Controller
             for ($y = 0; $y < $height; $y++) {
                 $row = [];
                 for ($x = 0; $x < $width; $x++) {
-                    // Получаем цвет пикселя
                     $rgb = imagecolorat($gdImage, $x, $y);
 
-                    // Извлекаем каналы
                     $r = ($rgb >> 16) & 0xFF;
                     $g = ($rgb >> 8) & 0xFF;
                     $b = $rgb & 0xFF;
-                    $a = ($rgb >> 24) & 0x7F; // Альфа канал
+                    $a = ($rgb >> 24) & 0x7F;
 
-                    // Формула для яркости (стандартная для RGB -> grayscale)
                     $brightness = (int)(0.299 * $r + 0.587 * $g + 0.114 * $b);
 
-                    // Учитываем альфа-канал для прозрачности
                     if ($type == IMAGETYPE_PNG && $a > 0) {
                         $brightness = (int)($brightness * (127 - $a) / 127);
                     }
 
-                    // Сохраняем пиксель
                     $row[$x] = $brightness;
 
-                    // Собираем статистику
                     $totalBrightness += $brightness;
                     if ($brightness > 0) $nonZeroCount++;
                     if ($brightness < $minBrightness) $minBrightness = $brightness;
                     if ($brightness > $maxBrightness) $maxBrightness = $brightness;
 
-                    // Сохраняем несколько значений для отладки
                     if ($y < 2 && $x < 2) {
                         $sampleValues["{$y},{$x}"] = [
                             'brightness' => $brightness,
@@ -278,7 +247,6 @@ class DctController extends Controller
                 $pixels[$y] = $row;
             }
 
-            // Сохраняем grayscale версию для превью
             $grayFilename = 'gray_' . $filename;
             $grayPath = $directory . '/' . $grayFilename;
 
@@ -296,11 +264,9 @@ class DctController extends Controller
                     imagepng($grayImage, storage_path('app/' . $grayPath), 9);
             }
 
-            // Очищаем память
             imagedestroy($gdImage);
             imagedestroy($grayImage);
 
-            // Статистика
             $totalPixels = $width * $height;
             $meanBrightness = $totalPixels > 0 ? $totalBrightness / $totalPixels : 0;
 
@@ -310,12 +276,10 @@ class DctController extends Controller
             Log::info("  Яркость: мин={$minBrightness}, макс={$maxBrightness}, среднее=" . round($meanBrightness, 2));
             Log::info("  Примеры пикселей:", $sampleValues);
 
-            // Проверяем, что изображение не полностью черное
             if ($nonZeroCount == 0) {
                 Log::warning("Изображение полностью черное или все пиксели равны 0!");
             }
 
-            // Создаем уменьшенное превью с помощью Intervention Image
             $previewFilename = 'preview_' . $filename;
             $previewPath = $directory . '/' . $previewFilename;
 
@@ -325,7 +289,6 @@ class DctController extends Controller
                 $previewImage->save(storage_path('app/' . $previewPath));
             } catch (\Exception $e) {
                 Log::warning("Не удалось создать превью через Intervention: " . $e->getMessage());
-                // Создаем превью через GD
                 $previewGd = imagecreatetruecolor(300, 300);
                 $sourceGd = imagecreatefromstring(file_get_contents($fullPath));
                 imagecopyresampled($previewGd, $sourceGd, 0, 0, 0, 0, 300, 300, $width, $height);
@@ -377,13 +340,10 @@ class DctController extends Controller
             }
 
             $this->validateAndNormalizePixels($pixels, $width, $height);
-            // Применяем 2D DCT к исходному изображению
             $dct2D = $this->apply2DDCT($pixels, $width, $height);
 
-            // Создаем изображение спектра DCT (логарифмическая шкала)
             $spectrumPath = $this->createDctSpectrumImage($dct2D, $width, $height);
 
-            // Анализ распределения энергии
             $energyAnalysis = $this->analyzeEnergyDistribution($dct2D, $width, $height);
 
             return response()->json([
@@ -403,18 +363,15 @@ class DctController extends Controller
         }
     }
 
-// Применение 2D DCT
     private function apply2DDCT(array $pixels, int $width, int $height): array
     {
         $dct2D = [];
 
-        // Сначала применяем DCT по строкам
         for ($y = 0; $y < $height; $y++) {
             $row = array_slice($pixels[$y], 0, $width);
             $dct2D[$y] = $this->apply1DDCT($row);
         }
 
-        // Затем применяем DCT по столбцам
         for ($x = 0; $x < $width; $x++) {
             $column = [];
             for ($y = 0; $y < $height; $y++) {
@@ -431,7 +388,6 @@ class DctController extends Controller
         return $dct2D;
     }
 
-// 1D DCT
     private function apply1DDCT(array $data): array
     {
         $N = count($data);
@@ -451,7 +407,6 @@ class DctController extends Controller
         return $result;
     }
 
-    // Анализ распределения энергии DCT коэффициентов (ИСПРАВЛЕННАЯ ВЕРСИЯ)
     private function analyzeEnergyDistribution(array $dctData, int $width, int $height): array
     {
         Log::info("=== НАЧАЛО АНАЛИЗА ЭНЕРГИИ DCT ===");
@@ -461,7 +416,6 @@ class DctController extends Controller
         $coefficients = [];
         $allValues = [];
 
-        // 1. Собираем все коэффициенты и вычисляем энергию
         Log::info("Сбор и вычисление энергии всех коэффициентов...");
         $minVal = INF;
         $maxVal = -INF;
@@ -472,7 +426,6 @@ class DctController extends Controller
                 $value = $dctData[$y][$x];
                 $allValues[] = $value;
 
-                // Находим мин/макс для понимания диапазона
                 if ($value < $minVal) $minVal = $value;
                 if ($value > $maxVal) $maxVal = $value;
 
@@ -482,7 +435,6 @@ class DctController extends Controller
                     Log::info("DC коэффициент: " . $dcValue);
                 }
 
-                // Вычисляем энергию (квадрат значения)
                 $energy = $value * $value;
 
                 $coefficients[] = [
@@ -500,7 +452,6 @@ class DctController extends Controller
         Log::info("Диапазон значений коэффициентов: min=" . round($minVal, 4) . ", max=" . round($maxVal, 4));
         Log::info("Общая энергия: " . round($totalEnergy, 4));
 
-        // 2. Если общая энергия близка к 0 - это ошибка
         if ($totalEnergy < 1e-10) {
             Log::warning("Общая энергия слишком мала: " . $totalEnergy);
             Log::warning("Проверьте входные данные и DCT преобразование");
@@ -520,12 +471,10 @@ class DctController extends Controller
             ];
         }
 
-        // 3. Доля энергии DC коэффициента
         $dcEnergy = $dcValue * $dcValue;
         $dcPercentage = ($dcEnergy / $totalEnergy) * 100;
         Log::info("Энергия DC коэффициента: " . round($dcEnergy, 4) . " (" . round($dcPercentage, 2) . "%)");
 
-        // 4. Сортируем коэффициенты по убыванию энергии
         Log::info("Сортировка коэффициентов по энергии...");
         usort($coefficients, function($a, $b) {
             return $b['energy'] <=> $a['energy'];
@@ -534,7 +483,6 @@ class DctController extends Controller
         $totalCoefficients = count($coefficients);
         Log::info("Всего коэффициентов: " . $totalCoefficients);
 
-        // 5. Вычисляем энергию в топ-N процентах
         $percentages = [1, 5, 10, 20];
         $energyResults = [];
 
@@ -552,7 +500,6 @@ class DctController extends Controller
             Log::info("Топ {$percent}% ({$topCount} коэф.): энергия = " .
                 round($topEnergy, 4) . " (" . round($energyPercentage, 2) . "%)");
 
-            // Детальный лог для 1%
             if ($percent == 1) {
                 Log::info("--- Топ 1% коэффициентов (первые {$topCount}):");
                 for ($i = 0; $i < min(5, $topCount); $i++) {
@@ -565,7 +512,6 @@ class DctController extends Controller
             }
         }
 
-        // 6. Анализ распределения
         $quartileSize = (int)($totalCoefficients / 4);
         $quartileEnergy = [0, 0, 0, 0];
         for ($i = 0; $i < $totalCoefficients; $i++) {
@@ -580,7 +526,6 @@ class DctController extends Controller
             Log::info("  Квартиль {$q}: " . round($percentage, 2) . "%");
         }
 
-        // 7. Возвращаем результаты
         $result = [
             'total_energy' => round($totalEnergy, 4),
             'total_coefficients' => $totalCoefficients,
@@ -600,7 +545,6 @@ class DctController extends Controller
         return $result;
     }
 
-// Вспомогательный метод для вычисления стандартного отклонения
     private function calculateStdDev(array $values): float
     {
         if (empty($values)) return 0;
@@ -615,19 +559,14 @@ class DctController extends Controller
         return round(sqrt($sumSquares / count($values)), 4);
     }
 
-// Также исправьте метод createDctSpectrumImage():
     // Создание изображения спектра DCT с цветовой шкалой и подписями
-    // Создание изображения спектра DCT с поддержкой русских надписей
     private function createDctSpectrumImage(array $dctData, int $width, int $height): ?string
     {
         try {
             Log::info("Создание улучшенного спектра DCT с цветовой шкалой...");
             Log::info("Размер спектра: {$width}x{$height}");
 
-            // ========== 1. СОЗДАЕМ ОСНОВНОЕ ИЗОБРАЖЕНИЕ СПЕКТРА ==========
-
-            // Увеличиваем размер для размещения шкалы и подписей
-            $padding = 80; // Место для шкалы и подписей
+            $padding = 80;
             $spectrumWidth = $width + $padding;
             $spectrumHeight = $height + $padding;
 
@@ -639,15 +578,12 @@ class DctController extends Controller
                 return null;
             }
 
-            // Заполняем фон
             $bgColor = imagecolorallocate($spectrumImage, 30, 30, 30); // Темно-серый фон
             $gridColor = imagecolorallocate($spectrumImage, 60, 60, 60); // Сетка
             $textColor = imagecolorallocate($spectrumImage, 200, 200, 200); // Текст
             $axisColor = imagecolorallocate($spectrumImage, 100, 100, 200); // Оси
 
             imagefill($spectrumImage, 0, 0, $bgColor);
-
-            // ========== 2. ВЫЧИСЛЯЕМ ЛОГАРИФМИЧЕСКИЕ ЗНАЧЕНИЯ ==========
 
             $logData = [];
             $maxLogVal = 0.0001;
@@ -657,8 +593,7 @@ class DctController extends Controller
                 for ($x = 0; $x < $width; $x++) {
                     $absVal = abs($dctData[$y][$x]);
 
-                    // Логарифмическое преобразование с защитой от 0
-                    $logVal = log(1 + $absVal * 100); // Умножаем на 100 для лучшего контраста
+                    $logVal = log(1 + $absVal * 100);
                     $logData[$y][$x] = $logVal;
 
                     if ($logVal > $maxLogVal) $maxLogVal = $logVal;
@@ -668,11 +603,7 @@ class DctController extends Controller
 
             Log::info("Логарифмический диапазон: min=" . round($minLogVal, 4) . ", max=" . round($maxLogVal, 4));
 
-            // ========== 3. СОЗДАЕМ ЦВЕТОВУЮ ПАЛИТРУ (JET colormap) ==========
-
             $colorMap = $this->createJetColorMap(256);
-
-            // ========== 4. РИСУЕМ СПЕКТР ==========
 
             $range = $maxLogVal - $minLogVal;
             if ($range < 0.0001) {
@@ -680,85 +611,60 @@ class DctController extends Controller
                 $range = 1;
             }
 
-            // Позиция спектра на изображении
             $spectrumX = 40;
             $spectrumY = 40;
 
             for ($y = 0; $y < $height; $y++) {
                 for ($x = 0; $x < $width; $x++) {
-                    // Нормализуем значение
                     $normalized = ($logData[$y][$x] - $minLogVal) / $range;
                     $normalized = max(0, min(1, $normalized));
 
-                    // Получаем индекс цвета из палитры
                     $colorIndex = (int)($normalized * 255);
                     $color = $colorMap[$colorIndex];
 
-                    // Рисуем пиксель
                     $pixelColor = imagecolorallocate($spectrumImage, $color[0], $color[1], $color[2]);
                     imagesetpixel($spectrumImage, $spectrumX + $x, $spectrumY + $y, $pixelColor);
 
-                    // Освобождаем цвет
                     imagecolordeallocate($spectrumImage, $pixelColor);
                 }
             }
 
-            // ========== 5. ДОБАВЛЯЕМ ЦВЕТОВУЮ ШКАЛУ ==========
-
             $this->addColorScale($spectrumImage, $colorMap, $spectrumWidth - 30, $spectrumY, 20, $height, $minLogVal, $maxLogVal, $textColor);
 
-            // ========== 6. ДОБАВЛЯЕМ СЕТКУ И ПОДПИСИ ==========
-
-            // Рисуем рамку вокруг спектра
             imagerectangle($spectrumImage, $spectrumX - 1, $spectrumY - 1,
                 $spectrumX + $width, $spectrumY + $height, $axisColor);
-
-            // ========== 7. ВЫДЕЛЯЕМ DC КОЭФФИЦИЕНТ ==========
 
             $dcColor = imagecolorallocate($spectrumImage, 255, 255, 0); // Желтый
             imagerectangle($spectrumImage, $spectrumX - 2, $spectrumY - 2,
                 $spectrumX + 2, $spectrumY + 2, $dcColor);
 
-            // ========== 8. РИСУЕМ СЕТКУ ЧАСТОТ ==========
-
-            // Горизонтальные линии (каждые 32 коэффициента)
             for ($i = 32; $i < $height; $i += 32) {
                 imageline($spectrumImage, $spectrumX, $spectrumY + $i,
                     $spectrumX + $width, $spectrumY + $i, $gridColor);
             }
 
-            // Вертикальные линии
             for ($i = 32; $i < $width; $i += 32) {
                 imageline($spectrumImage, $spectrumX + $i, $spectrumY,
                     $spectrumX + $i, $spectrumY + $height, $gridColor);
             }
 
-            // ========== 9. ДОБАВЛЯЕМ ТЕКСТ С ПОДДЕРЖКОЙ РУССКИХ СИМВОЛОВ ==========
-
-            // Настройки для текста
-            $fontSize = 4; // 1-5 для встроенных шрифтов, или путь к .ttf файлу
+            $fontSize = 4;
             $titleY = 15;
             $footerY = $spectrumHeight - 25;
 
-            // Функция для добавления текста с поддержкой UTF-8
             $this->addTextUTF8($spectrumImage, $textColor, $fontSize, $spectrumX, $spectrumY - 25, "Низкие частоты →");
             $this->addTextUTF8($spectrumImage, $textColor, $fontSize, $spectrumX + $width - 120, $spectrumY + $height + 15, "← Высокие частоты");
 
-            // Добавляем информацию о спектре
             $infoText = sprintf("Спектр DCT | Размер: %dx%d коэффициентов", $width, $height);
             $this->addTextUTF8($spectrumImage, $textColor, 3, 10, $footerY, $infoText);
 
-            // Добавляем легенду
             $legendY = $footerY - 20;
             $this->addTextUTF8($spectrumImage, $textColor, 3, 10, $legendY, "Темные = малые значения, Яркие = большие значения");
-
-            // ========== 10. СОХРАНЯЕМ ИЗОБРАЖЕНИЕ ==========
 
             $filename = 'dct_spectrum_color_' . uniqid() . '.png';
             $path = 'public/lab6/' . $filename;
             $fullPath = storage_path('app/' . $path);
 
-            // Создаем директорию если нужно
             $directory = dirname($fullPath);
             if (!is_dir($directory)) {
                 mkdir($directory, 0755, true);
@@ -773,7 +679,6 @@ class DctController extends Controller
                 return null;
             }
 
-            // Очищаем память
             imagedestroy($spectrumImage);
 
             return $path;
@@ -785,32 +690,24 @@ class DctController extends Controller
         }
     }
 
-// Новый метод для добавления текста с поддержкой UTF-8
     private function addTextUTF8($image, $color, $fontSize, $x, $y, $text): void
     {
-        // Если fontSize - это путь к .ttf файлу
         if (is_string($fontSize) && file_exists($fontSize)) {
-            // Используем TrueType шрифт с поддержкой UTF-8
             $font = $fontSize;
-            $fontSizeNum = 12; // Размер шрифта
+            $fontSizeNum = 12;
 
-            // Конвертируем текст в нужную кодировку если необходимо
             $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
 
-            // Добавляем текст
             imagettftext($image, $fontSizeNum, 0, $x, $y, $color, $font, $text);
         } else {
-            // Используем встроенный шрифт (ограниченная поддержка русских символов)
-            // Простой способ: заменяем русские символы на латинские аналоги или оставляем как есть
             $text = $this->transliterateIfNeeded($text);
             imagestring($image, (int)$fontSize, $x, $y, $text, $color);
         }
     }
 
-// Вспомогательный метод для транслитерации (если нет TrueType шрифтов)
+//  метод для транслитерации
     private function transliterateIfNeeded(string $text): string
     {
-        // Можно добавить простую транслитерацию, но лучше использовать TrueType шрифты
         $translit = [
             'а' => 'a', 'б' => 'b', 'в' => 'v', 'г' => 'g', 'д' => 'd',
             'е' => 'e', 'ё' => 'yo', 'ж' => 'zh', 'з' => 'z', 'и' => 'i',
@@ -836,7 +733,6 @@ class DctController extends Controller
     {
         $colorMap = [];
 
-        // Jet colormap (похож на MATLAB jet)
         for ($i = 0; $i < $size; $i++) {
             $pos = $i / ($size - 1);
 
@@ -873,14 +769,12 @@ class DctController extends Controller
         return $colorMap;
     }
 
-// Добавление цветовой шкалы
     private function addColorScale($image, array $colorMap, int $x, int $y, int $width, int $height,
                                    float $minVal, float $maxVal, int $textColor): void
     {
         $scaleHeight = $height;
         $scaleWidth = $width;
 
-        // Рисуем шкалу
         for ($i = 0; $i < $scaleHeight; $i++) {
             $normalized = 1 - ($i / $scaleHeight); // Инвертируем (высокие значения вверху)
             $colorIndex = (int)($normalized * 255);
@@ -891,7 +785,6 @@ class DctController extends Controller
             imagecolordeallocate($image, $lineColor);
         }
 
-        // Рамка вокруг шкалы
         imagerectangle($image, $x - 1, $y - 1, $x + $scaleWidth, $y + $scaleHeight, $textColor);
 
         // Подписи шкалы
@@ -914,8 +807,6 @@ class DctController extends Controller
         imagestringup($image, 3, $x + $scaleWidth + 25, $y + $scaleHeight/2, 'log(1 + |coeff|)', $textColor);
     }
 
-// Добавление информации о спектре
-    // Обновленный метод добавления информации о спектре
     private function addSpectrumInfo($image, int $width, int $height, float $minVal, float $maxVal,
                                      int $textColor, int $spectrumWidth, int $spectrumHeight): void
     {
@@ -936,7 +827,6 @@ class DctController extends Controller
         imagestring($image, 3, 10, $legendY, "Dark = low values, Bright = high values", $textColor);
     }
 
-// ДОПОЛНИТЕЛЬНО: Добавьте этот метод для проверки входных данных
     private function validateAndNormalizePixels(array &$pixels, int $width, int $height): void
     {
         Log::info("Проверка и нормализация пикселей...");
@@ -995,7 +885,6 @@ class DctController extends Controller
         }
     }
 
-// Метод для получения только спектра DCT (без повторного вычисления)
     public function getDctSpectrum(Request $request)
     {
         try {
@@ -1025,7 +914,6 @@ class DctController extends Controller
         }
     }
 
-// Метод для анализа энергии (можно вызвать отдельно)
     public function analyzeEnergy(Request $request)
     {
         try {
@@ -1051,28 +939,22 @@ class DctController extends Controller
         }
     }
 
-// Упрощенный 2D DCT
     private function applySimple2DDCT(array $pixels, int $width, int $height): array
     {
         $result = [];
 
-        // Применяем DCT по строкам
         for ($y = 0; $y < $height; $y++) {
             $result[$y] = $this->apply1DDCT($pixels[$y]);
         }
 
-        // Применяем DCT по столбцам
         for ($x = 0; $x < $width; $x++) {
-            // Извлекаем столбец
             $column = [];
             for ($y = 0; $y < $height; $y++) {
                 $column[$y] = $result[$y][$x];
             }
 
-            // Применяем DCT к столбцу
             $colDCT = $this->apply1DDCT($column);
 
-            // Записываем результат обратно
             for ($y = 0; $y < $height; $y++) {
                 $result[$y][$x] = $colDCT[$y];
             }
@@ -1081,8 +963,6 @@ class DctController extends Controller
         return $result;
     }
 
-
-    // Создание превью спектра DCT
     private function createDctSpectrumPreview(array $pixels, int $width, int $height, string $directory): ?string
     {
         try {
@@ -1193,8 +1073,6 @@ class DctController extends Controller
         return $result;
     }
 
-    // В контроллер DctController добавьте:
-
     public function createDctSpectrum(Request $request)
     {
         try {
@@ -1237,6 +1115,8 @@ class DctController extends Controller
                 return response()->json(['error' => 'Неверный формат пикселей'], 400);
             }
 
+            Log::info("Начало блочного DCT 8x8. Размер изображения: " . count($pixels) . "x" . count($pixels[0]));
+
             // Базовая таблица квантования (стандартная JPEG)
             $baseQuantizationTable = [
                 [16, 11, 10, 16, 24, 40, 51, 61],
@@ -1263,7 +1143,10 @@ class DctController extends Controller
             $blocks = [];
             $compressedPixels = array_fill(0, $height, array_fill(0, $width, 0));
 
+            Log::info("Изображение {$width}x{$height}. Обработка блоков 8x8...");
+
             // Обрабатываем блоки 8x8
+            $blockCount = 0;
             for ($y = 0; $y < $height; $y += 8) {
                 for ($x = 0; $x < $width; $x += 8) {
                     $block = [];
@@ -1273,7 +1156,14 @@ class DctController extends Controller
                         for ($j = 0; $j < 8; $j++) {
                             $row = $y + $i;
                             $col = $x + $j;
-                            $block[$i][$j] = $pixels[$row][$col] ?? 128; // Значение по умолчанию
+
+                            // Проверяем границы изображения
+                            if ($row < $height && $col < $width) {
+                                $block[$i][$j] = $pixels[$row][$col] ?? 128;
+                            } else {
+                                // Заполняем паддингом для неполных блоков
+                                $block[$i][$j] = 128;
+                            }
                         }
                     }
 
@@ -1308,30 +1198,74 @@ class DctController extends Controller
                         'y' => $y,
                         'quantized' => $quantized,
                     ];
+
+                    $blockCount++;
                 }
             }
 
-            // Создаем сжатое изображение
-            $compressedImage = $this->imageManager->create($width, $height);
+            Log::info("Обработано блоков: {$blockCount}");
 
+            // ========== СОЗДАЕМ СЖАТОЕ ИЗОБРАЖЕНИЕ (ИСПРАВЛЕННЫЙ СПОСОБ) ==========
+
+            // Создаем новое GD изображение
+            $gdImage = imagecreatetruecolor($width, $height);
+
+            if (!$gdImage) {
+                throw new \Exception("Не удалось создать GD изображение");
+            }
+
+            // Заполняем изображение пикселями
             for ($y = 0; $y < $height; $y++) {
                 for ($x = 0; $x < $width; $x++) {
                     $value = $compressedPixels[$y][$x];
-                    $compressedImage->drawPixel($x, $y, [$value, $value, $value]);
+                    $color = imagecolorallocate($gdImage, $value, $value, $value);
+                    imagesetpixel($gdImage, $x, $y, $color);
+                    imagecolordeallocate($gdImage, $color);
                 }
             }
 
+            // Сохраняем сжатое изображение
             $filename = 'compressed_' . uniqid() . '.jpg';
             $compressedPath = 'public/lab6/' . $filename;
-            $compressedImage->save(storage_path('app/' . $compressedPath), 90);
+            $fullPath = storage_path('app/' . $compressedPath);
+
+            // Создаем директорию если нужно
+            $directory = dirname($fullPath);
+            if (!is_dir($directory)) {
+                mkdir($directory, 0755, true);
+            }
+
+            // Сохраняем как JPEG
+            if (!imagejpeg($gdImage, $fullPath, 90)) {
+                throw new \Exception("Не удалось сохранить сжатое изображение");
+            }
+
+            // Очищаем память
+            imagedestroy($gdImage);
 
             // Вычисляем PSNR
             $psnr = $this->calculatePSNR($pixels, $compressedPixels, $height, $width);
 
+            // Создаем превью через Intervention для согласованности
+            try {
+                $previewImage = $this->imageManager->read($fullPath);
+                $previewImage->scale(300, 300);
+
+                $previewFilename = 'preview_' . $filename;
+                $previewPath = 'public/lab6/' . $previewFilename;
+                $previewImage->save(storage_path('app/' . $previewPath));
+
+                $previewUrl = Storage::url($previewPath);
+            } catch (\Exception $e) {
+                Log::warning("Не удалось создать превью через Intervention: " . $e->getMessage());
+                $previewUrl = Storage::url($compressedPath);
+            }
+
             return response()->json([
                 'success' => true,
-                'blocks_count' => count($blocks),
+                'blocks_count' => $blockCount,
                 'compressed_path' => Storage::url($compressedPath),
+                'preview_path' => $previewUrl,
                 'psnr' => round($psnr, 2),
                 'width' => $width,
                 'height' => $height,
